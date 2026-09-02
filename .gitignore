@@ -1,0 +1,15 @@
+# local tool state
+.omc/
+**/.omc/
+
+# test outputs
+results/
+*.jtl
+*.log
+
+# local-only binaries (linux binary IS committed for closed-network delivery)
+server/dummy-server
+jsonserver/dummy-json-darwin
+
+# java build output
+server/*.class

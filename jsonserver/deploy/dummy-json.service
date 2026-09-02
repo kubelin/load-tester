@@ -1,0 +1,14 @@
+[Unit]
+Description=dummy-json load test target server
+After=network.target
+
+[Service]
+ExecStart=/opt/dummy-json/dummy-json-linux-amd64 -port 18080
+Restart=on-failure
+User=nobody
+Group=nobody
+# 1~2만 TPS급 부하 필수 설정: 동시 커넥션 = 파일 디스크립터
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
