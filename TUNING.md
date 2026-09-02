@@ -43,6 +43,36 @@ sudo sysctl -w net.inet.tcp.msl=5000               # TIME_WAIT 30s → 10s
 caffeinate -dims jmeter -n -t plan.jmx ...
 ```
 
+**macOS 한정 — 프로세스당 스레드 하드 캡 (6,144개, 변경 불가)**
+
+macOS는 `kern.num_taskthreads`(=6,144)로 프로세스 하나의 스레드 수를 제한한다.
+JMeter는 vUser 1명 = 스레드 1개라서 **단일 인스턴스로 최대 ~6,100 vUser가 한계**
+(JVM 내부 스레드 ~35개 제외). 그 이상은 요청해도 조용히 6,100 근처에서 멈춘다.
+
+해법: **JMeter 프로세스를 나눠서 띄운다.** 캡은 프로세스당이므로 2개면 1만 vUser 가능.
+
+```bash
+# 같은 jmx, 결과/로그 파일만 분리 (같은 파일에 쓰면 깨짐)
+JVM_ARGS="-Xms2g -Xmx4g -Xss256k" jmeter -n -t plan.jmx -Jthreads=5000 \
+  -l result_a.jtl -j jmeter_a.log &
+JVM_ARGS="-Xms2g -Xmx4g -Xss256k" jmeter -n -t plan.jmx -Jthreads=5000 \
+  -l result_b.jtl -j jmeter_b.log &
+wait
+
+# 결과 병합 → HTML 리포트
+cat result_a.jtl > merged.jtl
+tail -n +2 result_b.jtl >> merged.jtl
+jmeter -g merged.jtl -o report/
+```
+
+주의: 스레드 캡은 프로세스당이지만 **임시 포트와 CPU는 머신 공유**다.
+합산 1만 커넥션이면 포트 범위 확장(위 1-A)이 필수가 된다.
+리눅스 발생기는 이 캡이 없으므로(수만 개, `ulimit -u`로 조절) 분할 불필요.
+
+> 실측 (M4 Pro 12C/24G, 루프백): 5,000×2 = 1만 vUser(think 1s) →
+> 정상상태 합산 ~8,650 RPS, 에러 0%. 포트 확장 전에는 포트 고갈로 에러 6~8% 발생,
+> 확장 후 해소. 잔여 0.03%는 macOS accept 큐(somaxconn=128) 순간 넘침.
+
 ### 1-B. Linux (RHEL 등에서 JMeter를 돌릴 경우)
 
 ```bash
