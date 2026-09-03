@@ -187,7 +187,115 @@ sudo sysctl --system
 
 ## 4. 튜닝으로 해결 안 되는 것
 
-- **네트워크 대역폭**: 응답 100KB × 20,000 TPS = 16Gbps. NIC/스위치가 감당하는지 먼저 계산
+- **네트워크 대역폭**: NIC/스위치가 감당하는지 먼저 계산 (5장 공식)
 - **발생기 CPU 포화**: 커널이 아니라 부하 설계 문제 → 캘리브레이션으로 상한 실측 후 70~80%로 운용
 - **WAS 애플리케이션 설정**: 워커 스레드풀, keep-alive 정책, DB 커넥션 풀은 OS가 아닌 WAS/앱에서
   (Tomcat `maxThreads`·`maxConnections`, JEUS 웹엔진 thread pool, WebtoB `MaxUser` 등)
+
+---
+
+## 5. 대역폭 → 최대 TPS 계산 공식
+
+테스트 설계 전에 "이 조합이 네트워크상 가능한가"를 먼저 걸러낸다.
+
+```
+① 대역폭을 바이트로:   10 Gbps ÷ 8 = 1,250 MB/s
+② 트랜잭션 1건 크기:   요청 + 응답 + 프로토콜 오버헤드(HTTP 헤더 ~300B, TCP/IP ~66B×왕복 패킷수)
+③ 이론 최대 TPS:       ① ÷ ②
+```
+
+**암산 공식** (자주 쓰는 형태):
+
+```
+필요 대역폭(Gbps) ≈ 트랜잭션 크기(KB) × TPS(만 단위) × 0.08
+
+예: 10KB 트랜잭션 × 2만 TPS → 10 × 2 × 0.08 = 1.6 Gbps
+```
+
+**10G NIC 기준 조견표** (요청+응답 합산 크기):
+
+| 트랜잭션 크기 | 2만 TPS | 5만 TPS | 이론 최대 TPS |
+|---|---|---|---|
+| 1KB (소형 JSON) | 0.16 Gbps (2%) | 0.4 Gbps (4%) | ~125만 |
+| 10KB | 1.6 Gbps (16%) | 4 Gbps (40%) | ~12만 |
+| 50KB | 8 Gbps (80%) | 20 Gbps — **불가** | ~2.5만 |
+
+주의:
+- 이론치의 **60~80%를 실용 한계**로 본다 (TCP 혼잡제어, ACK, 재전송 오버헤드)
+- 작은 패킷 다량이면 대역폭보다 **pps 한계**가 먼저 온다 (특히 VM 가상 NIC)
+- 대역폭 계산은 "불가능 조합 필터"일 뿐, 가능 범위 내 실측은 캘리브레이션으로
+
+---
+
+## 6. 부하 발생기 커널 값 점검 → 변경 요청 절차
+
+회사 VM처럼 직접 root 권한이 없는 환경에서 인프라팀에 변경을 요청하는 흐름.
+
+### 6-1. 조회 및 검토
+
+발생기 VM에서 (root 불필요):
+
+```bash
+./scripts/check-kernel-loadgen.sh
+```
+
+현재값과 권장값을 대조해 `[OK] / [변경필요]`로 출력한다. 출력을 그대로 요청서에 첨부.
+스크립트를 못 옮기는 환경이면 수동 조회:
+
+```bash
+ulimit -Sn; ulimit -Hn; ulimit -Su
+sysctl fs.file-max fs.nr_open kernel.threads-max kernel.pid_max vm.max_map_count
+sysctl net.ipv4.ip_local_port_range net.ipv4.tcp_tw_reuse net.ipv4.tcp_fin_timeout
+sysctl net.core.rmem_max net.core.wmem_max net.netfilter.nf_conntrack_max
+```
+
+### 6-2. 변경 요청서 (인프라팀 전달용 양식)
+
+> **목적**: 부하테스트 발생기(JMeter) 운용 — 동시 커넥션 1만+, 신규 커넥션 초당 수천 건 발생
+> **대상 서버**: (호스트명/IP)
+> **원복 조건**: 부하테스트 기간 종료 후 원복 가능 (영구 적용도 무방 — 서비스 영향 없는 상향 조정임)
+
+**A. sysctl — `/etc/sysctl.d/90-loadtest.conf` 생성 후 `sysctl --system`**
+
+```ini
+# 파일 디스크립터
+fs.file-max = 1000000
+fs.nr_open = 1048576
+
+# 스레드/프로세스 (JMeter 1만+ 스레드)
+kernel.threads-max = 100000
+kernel.pid_max = 100000
+vm.max_map_count = 262144
+
+# 임시 포트 / TIME_WAIT (신규 커넥션 발생 능력)
+net.ipv4.ip_local_port_range = 1024 65000
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+
+# 소켓 버퍼
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+
+# 방화벽(conntrack) 사용 시에만
+net.netfilter.nf_conntrack_max = 262144
+```
+
+**B. 사용자 한도 — `/etc/security/limits.d/90-loadtest.conf` 생성 (재로그인 후 적용)**
+
+```
+<jmeter실행계정>  soft  nofile  65536
+<jmeter실행계정>  hard  nofile  65536
+<jmeter실행계정>  soft  nproc   65536
+<jmeter실행계정>  hard  nproc   65536
+```
+
+### 6-3. 적용 확인
+
+변경 후 발생기 VM에서 다시:
+
+```bash
+./scripts/check-kernel-loadgen.sh   # 전 항목 [OK] 확인
+```
+
+`ulimit` 항목은 **재로그인(새 세션)** 후에 반영되는 점 주의.
+`tcp_tw_recycle`은 요청하지 말 것 — RHEL 8 커널에서 제거됐고 NAT 장애를 유발하던 옵션이다.
