@@ -15,6 +15,15 @@ THREADS=$(( TPS / 20 )); [ "$THREADS" -lt 100 ] && THREADS=100   # 스레드 ≥
 RAMP=$(( THREADS / 100 )); [ "$RAMP" -lt 5 ] && RAMP=5
 
 ulimit -n 65536
+
+# Java 버전 가드 — 시스템 구형 Java(1.8)가 잡히면 NoClassDefFoundError로 죽는다 (DEPLOY.md 3장)
+JMAJ=$(java -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
+if [ "${JMAJ:-0}" -lt 17 ]; then
+  echo "오류: $(java -version 2>&1 | head -1)"
+  echo "      JMeter 5.6에는 JDK 17이 필요합니다. JAVA_HOME과 PATH 앞에 JDK17을 두세요:"
+  echo "      export JAVA_HOME=~/jdk-17.x ; export PATH=\$JAVA_HOME/bin:\$PATH"
+  [ "${FORCE_JAVA:-0}" != "1" ] && exit 1
+fi
 mkdir -p results
 TAG="target${TPS}_$(date +%m%d%H%M)"
 
