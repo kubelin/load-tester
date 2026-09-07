@@ -121,10 +121,8 @@ curl -s http://<서버VM IP>:18080/health   # → OK (안 되면 방화벽부터
 # 모드 2 — 최대 TPS 탐색
 ./scripts/run-max-tps.sh <서버VM IP> 18080
 
-# 유저 시나리오 — vUser 5,000명 (1초 think time)
-JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t echo-load.jmx \
-  -Jhost=<서버VM IP> -Jport=18080 -Jthreads=5000 -Jrampup=30 \
-  -Jduration=300 -Jthinkms=1000 -l users5k.jtl
+# 유저 시나리오 — vUser 5,000명 (1초 think time, REPORT=1 붙이면 HTML 리포트까지)
+./scripts/run-vusers.sh 5000 <서버VM IP> 18080 1000 300
 ```
 
 판정 기준·스레드 산정은 TESTING.md와 FORMULAS.md 참고.
