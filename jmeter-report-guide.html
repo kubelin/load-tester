@@ -43,13 +43,44 @@
 <h1>JMeter HTML 리포트 분석 가이드
 <small>load-tester 프로젝트 · 결과서(REPORT-GUIDE.md) 작성을 위한 대시보드 판독법</small></h1>
 
-<h2>0. 리포트 생성과 열기</h2>
+<h2>0. 리포트 생성</h2>
 <pre>REPORT=1 ./scripts/run-target-tps.sh 10000 &lt;서버IP&gt; 18080 300     # 실행과 동시에 생성
 JVM_ARGS=-Xmx6g jmeter -g results/result_xxx.jtl -o results/report_xxx/   # 기존 jtl에서 생성</pre>
-<p><code>results/report_xxx/index.html</code>을 브라우저로 연다. 좌측 메뉴가
-<b>Dashboard</b>(요약) / <b>Charts</b>(그래프 3분류)로 나뉜다.</p>
 
-<h2>1. 5분 분석 루틴 — 이 순서로만 보면 된다</h2>
+<h2>1. 리포트 열기와 화면 구조</h2>
+
+<h3>1-1. 리포트는 "폴더 하나"다</h3>
+<pre>results/report_xxx/
+├── index.html        ← 브라우저로 연다 (더블클릭, 웹서버 불필요)
+├── content/          ← 그래프 데이터·스크립트 (전부 로컬 — 폐쇄망에서 동작)
+└── sbadmin2-1.0.7/   ← 화면 테마</pre>
+<div class="tip"><b>index.html만 복사하면 깨진다.</b> 그래프가 하얗게 나오면 이 문제 —
+공유·반출은 반드시 폴더째 zip으로.</div>
+
+<h3>1-2. 화면 지도</h3>
+<pre>┌──────────────────────────────────────────────┐
+│ 상단바: 테스트 시작/종료 시각, 소요시간, 파일명  │
+├──────────┬───────────────────────────────────┤
+│ 왼쪽 메뉴 │  본문                              │
+│ Dashboard ←─ 처음 열리는 요약 (APDEX → 성공/실패│
+│          │   도넛 → Statistics 표 → Errors 표) │
+│ Charts ▼ │                                   │
+│  ├ Over Time      : 시간축 그래프 (응답·스레드) │
+│  ├ Throughput     : TPS, 초당 응답코드          │
+│  └ Response Times : 백분위, 분포, 스레드 대비    │
+└──────────┴───────────────────────────────────┘</pre>
+
+<h3>1-3. 조작법 — 모르면 손해</h3>
+<table>
+<tr><th>하고 싶은 것</th><th>방법</th></tr>
+<tr><td>그래프 수치 정확히 읽기</td><td>선 위에 <b>마우스 오버</b> — 시각·값 툴팁</td></tr>
+<tr><td>특정 선만 보기/숨기기</td><td>그래프 아래 <b>범례(legend) 클릭</b>으로 토글 — 요청 종류 많을 때 필수</td></tr>
+<tr><td>스파이크 구간 확대</td><td>그래프 위에서 <b>드래그로 구간 선택</b> → 줌인 (더블클릭으로 복귀)</td></tr>
+<tr><td>문제 요청부터 정렬</td><td>Statistics <b>열 제목 클릭</b> — Error%·p99 내림차순</td></tr>
+<tr><td>특정 API만 필터</td><td>Statistics 표 우측 상단 검색창</td></tr>
+</table>
+
+<h2>2. 5분 분석 루틴 — 이 순서로만 보면 된다</h2>
 <div class="routine">
 <div class="card"><b>합격/불합격 즉답 — Dashboard의 Statistics 표</b><br>
 <span class="path">Dashboard → Statistics</span><br>
@@ -72,9 +103,9 @@ Error % 와 99th pct 두 열만 먼저 본다. 에러율 기준 초과 또는 p9
 곡선이 90% 이후 급격히 꺾여 오르면 "대부분 빠른데 일부가 심하게 느림" = 간헐 이벤트(GC·커넥션 재수립·락). 완만하면 전반적 부하 반응.</div>
 </div>
 
-<h2>2. 화면별 해설</h2>
+<h2>3. 화면별 해설</h2>
 
-<h3>2-1. APDEX (Dashboard 최상단)</h3>
+<h3>3-1. APDEX (Dashboard 최상단)</h3>
 <p>만족도 지수: <code>(만족 표본 + 허용 표본/2) ÷ 전체</code>. 기본 임계값은
 만족 ≤ <b>500ms</b>, 허용 ≤ <b>1.5s</b>. 1.000이면 전 표본이 500ms 이내라는 뜻.</p>
 <table>
@@ -86,7 +117,7 @@ Error % 와 99th pct 두 열만 먼저 본다. 에러율 기준 초과 또는 p9
 <p>SLA가 100ms처럼 엄격하면 기본 임계값 500ms는 너무 관대하다. 생성 시
 <code>-Jjmeter.reportgenerator.apdex_satisfied_threshold=100</code> 으로 조정 가능.</p>
 
-<h3>2-2. Statistics 표 — 열 읽는 법</h3>
+<h3>3-2. Statistics 표 — 열 읽는 법</h3>
 <table>
 <tr><th>열</th><th>의미</th><th>결과서 사용</th></tr>
 <tr><td>#Samples / KO</td><td>총 요청 수 / 실패 수</td><td>표본 규모 명기</td></tr>
@@ -101,7 +132,7 @@ Error % 와 99th pct 두 열만 먼저 본다. 에러율 기준 초과 또는 p9
 <code>./scripts/summarize-jtl.sh &lt;jtl&gt; &lt;램프업초&gt;</code> 로 재계산해서 결과서에 쓴다.
 리포트 표와 요약 스크립트 수치가 다른 이유가 이것.</div>
 
-<h3>2-3. Errors 표 — 에러 유형별 의미</h3>
+<h3>3-3. Errors 표 — 에러 유형별 의미</h3>
 <table>
 <tr><th>에러 텍스트</th><th>뜻</th><th>의심 지점</th></tr>
 <tr><td><code>500 / 502 / 503</code></td><td>서버가 받긴 했으나 실패 응답</td><td>앱 로직, 다운스트림(DB), 워커 고갈(503)</td></tr>
@@ -112,7 +143,7 @@ Error % 와 99th pct 두 열만 먼저 본다. 에러율 기준 초과 또는 p9
 <tr><td><code>Assertion failed</code></td><td>응답은 왔으나 내용 불일치</td><td>앱 응답 규격, 부분 실패</td></tr>
 </table>
 
-<h3 id="patterns">2-4. Response Times Over Time — 패턴 판독표</h3>
+<h3 id="patterns">3-4. Response Times Over Time — 패턴 판독표</h3>
 
 <div class="pattern">
 <svg viewBox="0 0 150 60" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="60" fill="#f6f8fa"/><polyline points="5,40 145,38" fill="none" stroke="#1a7f37" stroke-width="2.5"/></svg>
@@ -143,7 +174,7 @@ soak 테스트에서 이 패턴이면 불합격. 서버 메모리 추이와 대�
 계단 시작 시점의 TPS/스레드 수가 곧 <b>그 자원의 한계 용량</b>이다. max-tps 분석에서 중요.</div>
 </div>
 
-<h3>2-5. 나머지 그래프 활용</h3>
+<h3>3-5. 나머지 그래프 활용</h3>
 <table>
 <tr><th>그래프</th><th>위치</th><th>보는 이유</th></tr>
 <tr><td>Active Threads Over Time</td><td>Over Time</td><td>램프업이 계획대로 됐는지. <b>run-multi 병합 리포트에선 인스턴스당 수치로 표시됨(실제는 ×N)</b></td></tr>
@@ -153,7 +184,7 @@ soak 테스트에서 이 패턴이면 불합격. 서버 메모리 추이와 대�
 <tr><td>Codes Per Second</td><td>Throughput</td><td>에러가 특정 시간대에 몰렸는지 분산됐는지</td></tr>
 </table>
 
-<h2>3. 시나리오별 체크포인트</h2>
+<h2>4. 시나리오별 체크포인트</h2>
 <table>
 <tr><th>시나리오</th><th>반드시 볼 것</th><th>합격 판정</th></tr>
 <tr><td><b>목표 TPS 유지</b><br>(run-target-tps)</td>
@@ -170,7 +201,7 @@ soak 테스트에서 이 패턴이면 불합격. 서버 메모리 추이와 대�
 <td>TPS·p99 그래프가 끝까지 수평 + 서버 메모리 무증가</td></tr>
 </table>
 
-<h2>4. 자주 하는 실수</h2>
+<h2>5. 자주 하는 실수</h2>
 <div class="card">
 <b>① 평균만 인용</b> — 평균 5ms + p99 2초 = 100명 중 1명은 2초 대기. 결과서엔 항상 avg/p95/p99/max 세트.<br>
 <b>② Statistics 표 수치를 그대로 결과서에</b> — 램프업 포함 수치다. summarize-jtl.sh로 정상상태 재계산.<br>
