@@ -21,7 +21,7 @@ if [ "${JMAJ:-0}" -lt 17 ]; then
   [ "${FORCE_JAVA:-0}" != "1" ] && exit 1
 fi
 mkdir -p results
-RUN="max_$(date +%m%d%H%M)"
+RUN="max_$(date +%m%d%H%M%S)"
 declare -a RESULTS
 
 echo "=== 최대 TPS 탐색 | host=${HOST}:${PORT} 단계=${STAGES[*]} 각 ${DUR}s ==="

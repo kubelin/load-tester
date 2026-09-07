@@ -25,7 +25,7 @@ if [ "${JMAJ:-0}" -lt 17 ]; then
   [ "${FORCE_JAVA:-0}" != "1" ] && exit 1
 fi
 mkdir -p results
-TAG="target${TPS}_$(date +%m%d%H%M)"
+TAG="target${TPS}_$(date +%m%d%H%M%S)"
 
 echo "=== 목표 ${TPS} TPS | host=${HOST}:${PORT} threads=${THREADS} duration=${DURATION}s ==="
 JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t target-tps.jmx \

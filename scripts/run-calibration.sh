@@ -22,7 +22,7 @@ if [ "${JMAJ:-0}" -lt 17 ]; then
   [ "${FORCE_JAVA:-0}" != "1" ] && exit 1
 fi
 mkdir -p results
-TAG="calib_$(date +%m%d%H%M)"
+TAG="calib_$(date +%m%d%H%M%S)"
 
 echo "=== 캘리브레이션 | ${HOST}:${PORT} | 200스레드 무휴식 ${DUR}s ==="
 curl -sf -m 3 "http://${HOST}:${PORT}/health" >/dev/null \

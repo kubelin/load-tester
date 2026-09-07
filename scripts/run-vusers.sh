@@ -26,7 +26,7 @@ if [ "${JMAJ:-0}" -lt 17 ]; then
   [ "${FORCE_JAVA:-0}" != "1" ] && exit 1
 fi
 mkdir -p results
-TAG="vusers${USERS}_$(date +%m%d%H%M)"
+TAG="vusers${USERS}_$(date +%m%d%H%M%S)"
 
 echo "=== vUser ${USERS}명 | think ${THINK}ms | ${HOST}:${PORT} | ${DURATION}s ==="
 [ "$EXPECT" -gt 0 ] && echo "    예상 TPS ≈ ${EXPECT}/s (FORMULAS.md ①: vUser ÷ (RT+think))"

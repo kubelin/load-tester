@@ -28,7 +28,7 @@ if [ "${JMAJ:-0}" -lt 17 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
 fi
 
 mkdir -p results
-TAG="agents_${MODE}_$(date +%m%d%H%M)"
+TAG="agents_${MODE}_$(date +%m%d%H%M%S)"
 
 case "$MODE" in
   vusers)
