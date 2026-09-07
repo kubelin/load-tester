@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JMeter HTML 리포트 분석 가이드</title>
+<style>
+  :root{
+    --bg:#fafaf8; --fg:#1a1a1a; --muted:#666; --line:#ddd;
+    --accent:#0b5fa5; --ok:#1a7f37; --warn:#b45309; --bad:#b91c1c;
+    --card:#fff; --code:#f3f2ee;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 16px 80px;font:15px/1.7 -apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--fg)}
+  main{max-width:880px;margin:0 auto}
+  h1{font-size:26px;border-bottom:3px solid var(--accent);padding:24px 0 12px;margin:0 0 6px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:4px}
+  h2{font-size:20px;margin:44px 0 10px;padding-left:10px;border-left:5px solid var(--accent)}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--accent)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--card);font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#eef3f8}
+  code{background:var(--code);padding:1px 6px;border-radius:4px;font-size:13px}
+  pre{background:var(--code);padding:12px 14px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.5}
+  .ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:14px 0}
+  .routine{counter-reset:step}
+  .routine .card{position:relative;padding-left:56px}
+  .routine .card::before{counter-increment:step;content:counter(step);position:absolute;left:14px;top:14px;
+    width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;
+    display:flex;align-items:center;justify-content:center;font-size:15px}
+  .pattern{display:flex;gap:14px;align-items:center;border:1px solid var(--line);border-radius:8px;
+    background:var(--card);padding:10px 14px;margin:10px 0}
+  .pattern svg{flex:0 0 150px}
+  .tip{border-left:4px solid var(--warn);background:#fdf6ec;padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0}
+  .path{color:var(--muted);font-size:13px}
+  footer{margin-top:60px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<main>
+
+<h1>JMeter HTML 리포트 분석 가이드
+<small>load-tester 프로젝트 · 결과서(REPORT-GUIDE.md) 작성을 위한 대시보드 판독법</small></h1>
+
+<h2>0. 리포트 생성과 열기</h2>
+<pre>REPORT=1 ./scripts/run-target-tps.sh 10000 &lt;서버IP&gt; 18080 300     # 실행과 동시에 생성
+JVM_ARGS=-Xmx6g jmeter -g results/result_xxx.jtl -o results/report_xxx/   # 기존 jtl에서 생성</pre>
+<p><code>results/report_xxx/index.html</code>을 브라우저로 연다. 좌측 메뉴가
+<b>Dashboard</b>(요약) / <b>Charts</b>(그래프 3분류)로 나뉜다.</p>
+
+<h2>1. 5분 분석 루틴 — 이 순서로만 보면 된다</h2>
+<div class="routine">
+<div class="card"><b>합격/불합격 즉답 — Dashboard의 Statistics 표</b><br>
+<span class="path">Dashboard → Statistics</span><br>
+Error % 와 99th pct 두 열만 먼저 본다. 에러율 기준 초과 또는 p99가 SLA 초과면 이후 분석은 "왜 실패했나" 모드로 전환.</div>
+
+<div class="card"><b>부하가 계획대로 걸렸나 — TPS 그래프</b><br>
+<span class="path">Charts → Throughput → Transactions Per Second</span><br>
+고정 TPS 테스트면 목표값에서 평평해야 한다. 출렁이면 발생기·서버 어느 쪽이든 조절 실패 → 측정 신뢰도부터 의심.</div>
+
+<div class="card"><b>버텼나, 버티는 척했나 — 응답시간 추이</b><br>
+<span class="path">Charts → Over Time → Response Times Over Time</span><br>
+이 가이드의 핵심 그래프. 아래 <a href="#patterns">패턴 판독표</a>로 모양을 해석한다. TPS가 평평해도 응답시간이 우상향이면 불합격 예비군.</div>
+
+<div class="card"><b>에러의 정체 — Errors 표</b><br>
+<span class="path">Dashboard → Errors</span><br>
+같은 1%라도 <code>500</code>(서버 로직)과 <code>Connection refused</code>(수용 한계)와 <code>timeout</code>(대기열)은 원인·조치가 전혀 다르다. 아래 3-3 참고.</div>
+
+<div class="card"><b>꼬리 확인 — Percentiles</b><br>
+<span class="path">Charts → Response Times → Response Time Percentiles</span><br>
+곡선이 90% 이후 급격히 꺾여 오르면 "대부분 빠른데 일부가 심하게 느림" = 간헐 이벤트(GC·커넥션 재수립·락). 완만하면 전반적 부하 반응.</div>
+</div>
+
+<h2>2. 화면별 해설</h2>
+
+<h3>2-1. APDEX (Dashboard 최상단)</h3>
+<p>만족도 지수: <code>(만족 표본 + 허용 표본/2) ÷ 전체</code>. 기본 임계값은
+만족 ≤ <b>500ms</b>, 허용 ≤ <b>1.5s</b>. 1.000이면 전 표본이 500ms 이내라는 뜻.</p>
+<table>
+<tr><th>APDEX</th><th>해석</th></tr>
+<tr><td>0.94 ~ 1.00</td><td class="ok">우수</td></tr>
+<tr><td>0.85 ~ 0.94</td><td class="warn">양호 — p99 확인 필요</td></tr>
+<tr><td>&lt; 0.85</td><td class="bad">문제 — 응답시간 분석 필수</td></tr>
+</table>
+<p>SLA가 100ms처럼 엄격하면 기본 임계값 500ms는 너무 관대하다. 생성 시
+<code>-Jjmeter.reportgenerator.apdex_satisfied_threshold=100</code> 으로 조정 가능.</p>
+
+<h3>2-2. Statistics 표 — 열 읽는 법</h3>
+<table>
+<tr><th>열</th><th>의미</th><th>결과서 사용</th></tr>
+<tr><td>#Samples / KO</td><td>총 요청 수 / 실패 수</td><td>표본 규모 명기</td></tr>
+<tr><td>Error %</td><td>실패 비율</td><td><b>합격 기준 1순위</b> (기준 예: ≤ 0.1%)</td></tr>
+<tr><td>Average</td><td>평균 응답 (ms)</td><td>참고용 — <span class="bad">평균 단독 인용 금지</span></td></tr>
+<tr><td>90th / 95th / 99th pct</td><td>상위 백분위 응답</td><td><b>p99가 실질 품질 지표</b></td></tr>
+<tr><td>Min / Max</td><td>최소/최대</td><td>Max 스파이크 시 Over Time에서 시점 추적</td></tr>
+<tr><td>Throughput</td><td>초당 처리 (≈TPS)</td><td>목표 대비 달성률</td></tr>
+<tr><td>KB/sec (recv/sent)</td><td>대역폭 사용</td><td>NIC 한도 대비 (FORMULAS ④)</td></tr>
+</table>
+<div class="tip"><b>함정:</b> 이 표는 <b>램프업 구간을 포함한 전체 평균</b>이다. 정상상태 수치가 필요하면
+<code>./scripts/summarize-jtl.sh &lt;jtl&gt; &lt;램프업초&gt;</code> 로 재계산해서 결과서에 쓴다.
+리포트 표와 요약 스크립트 수치가 다른 이유가 이것.</div>
+
+<h3>2-3. Errors 표 — 에러 유형별 의미</h3>
+<table>
+<tr><th>에러 텍스트</th><th>뜻</th><th>의심 지점</th></tr>
+<tr><td><code>500 / 502 / 503</code></td><td>서버가 받긴 했으나 실패 응답</td><td>앱 로직, 다운스트림(DB), 워커 고갈(503)</td></tr>
+<tr><td><code>Connection refused</code></td><td>연결 자체를 거부</td><td>서버 다운, accept 큐(somaxconn), 방화벽</td></tr>
+<tr><td><code>Connection timed out</code></td><td>연결 시도 응답 없음</td><td>SYN 큐 포화, conntrack, 네트워크</td></tr>
+<tr><td><code>Read timed out / failed to respond</code></td><td>연결 후 응답 안 옴</td><td>서버 처리 지연, keep-alive 강제 종료</td></tr>
+<tr><td><code>Can't assign requested address</code></td><td><b>발생기</b> 포트 고갈</td><td>서버 문제 아님! TUNING.md 1장</td></tr>
+<tr><td><code>Assertion failed</code></td><td>응답은 왔으나 내용 불일치</td><td>앱 응답 규격, 부분 실패</td></tr>
+</table>
+
+<h3 id="patterns">2-4. Response Times Over Time — 패턴 판독표</h3>
+
+<div class="pattern">
+<svg viewBox="0 0 150 60" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="60" fill="#f6f8fa"/><polyline points="5,40 145,38" fill="none" stroke="#1a7f37" stroke-width="2.5"/></svg>
+<div><b class="ok">평평 (수평 유지)</b><br>정상. 부하 전 구간에서 안정적으로 소화 중. 결과서에 "유지 확인"으로 기록.</div>
+</div>
+
+<div class="pattern">
+<svg viewBox="0 0 150 60" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="60" fill="#f6f8fa"/><polyline points="5,48 50,42 95,30 145,12" fill="none" stroke="#b91c1c" stroke-width="2.5"/></svg>
+<div><b class="bad">우상향 (지속 상승)</b><br>무언가 누적되고 있다 — 커넥션 누수, 큐 적체, 메모리 증가, DB 풀 고갈.
+soak 테스트에서 이 패턴이면 불합격. 서버 메모리 추이와 대조할 것.</div>
+</div>
+
+<div class="pattern">
+<svg viewBox="0 0 150 60" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="60" fill="#f6f8fa"/><polyline points="5,45 20,45 25,15 30,45 55,45 60,15 65,45 90,45 95,15 100,45 125,45 130,15 135,45 145,45" fill="none" stroke="#b45309" stroke-width="2"/></svg>
+<div><b class="warn">주기적 톱니 (규칙적 스파이크)</b><br>주기성 = GC(서버 또는 발생기 JVM), 스케줄 작업, 캐시 만료.
+간격이 일정하면 GC 가능성 높음 — 서버가 Java면 GC 로그, 발생기면 힙 증설/인스턴스 분할(run-multi) 검토.</div>
+</div>
+
+<div class="pattern">
+<svg viewBox="0 0 150 60" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="60" fill="#f6f8fa"/><polyline points="5,45 60,45 63,10 68,44 145,44" fill="none" stroke="#b45309" stroke-width="2"/></svg>
+<div><b class="warn">단발 스파이크</b><br>일시 이벤트 — 재시도 폭주, 네트워크 순단, 이웃 VM 간섭(%st).
+발생 시각을 서버 access 로그(proc_us)와 대조: proc_us도 튀었으면 서버 내부, 아니면 경로 문제.</div>
+</div>
+
+<div class="pattern">
+<svg viewBox="0 0 150 60" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="60" fill="#f6f8fa"/><polyline points="5,48 45,48 48,32 90,32 93,14 145,14" fill="none" stroke="#b91c1c" stroke-width="2.5"/></svg>
+<div><b class="bad">계단형 (단계별 상승)</b><br>임계 통과의 신호 — 워커 풀 소진 → 큐잉 시작, 커넥션 한도 도달 등.
+계단 시작 시점의 TPS/스레드 수가 곧 <b>그 자원의 한계 용량</b>이다. max-tps 분석에서 중요.</div>
+</div>
+
+<h3>2-5. 나머지 그래프 활용</h3>
+<table>
+<tr><th>그래프</th><th>위치</th><th>보는 이유</th></tr>
+<tr><td>Active Threads Over Time</td><td>Over Time</td><td>램프업이 계획대로 됐는지. <b>run-multi 병합 리포트에선 인스턴스당 수치로 표시됨(실제는 ×N)</b></td></tr>
+<tr><td>Latencies Over Time</td><td>Over Time</td><td>Latency(첫 바이트)와 응답시간 차이 크면 = 본문 전송이 느림(대역폭)</td></tr>
+<tr><td>Time Vs Threads</td><td>Response Times</td><td>스레드 수 증가에 따른 응답 변화 — 선형 상승 시작점이 포화점</td></tr>
+<tr><td>Response Time Distribution</td><td>Response Times</td><td>봉우리가 2개면 두 종류 경로 존재(캐시 히트/미스, GC 걸린 요청)</td></tr>
+<tr><td>Codes Per Second</td><td>Throughput</td><td>에러가 특정 시간대에 몰렸는지 분산됐는지</td></tr>
+</table>
+
+<h2>3. 시나리오별 체크포인트</h2>
+<table>
+<tr><th>시나리오</th><th>반드시 볼 것</th><th>합격 판정</th></tr>
+<tr><td><b>목표 TPS 유지</b><br>(run-target-tps)</td>
+<td>TPS 그래프 평탄성, Error %, p99, 응답 추이</td>
+<td>TPS 목표±2% 평탄 + 에러≤0.1% + p99≤SLA + 응답 그래프 평평</td></tr>
+<tr><td><b>최대 TPS</b><br>(run-max-tps)</td>
+<td>단계별 Throughput, Time Vs Threads, 한계 도달 시 에러 유형</td>
+<td>정체점 = 용량. 한계에서 "에러 폭발"이 아닌 "지연 상승"이면 graceful → 견고성 가점</td></tr>
+<tr><td><b>vUser</b><br>(run-vusers / run-multi)</td>
+<td>TPS ≈ 예상치(vUser÷think), Error %, p99</td>
+<td>예상 TPS 도달 + 에러 0% + p99 안정</td></tr>
+<tr><td><b>Soak (1시간)</b></td>
+<td><b>Over Time 그래프 전부</b> — 추이가 전부다</td>
+<td>TPS·p99 그래프가 끝까지 수평 + 서버 메모리 무증가</td></tr>
+</table>
+
+<h2>4. 자주 하는 실수</h2>
+<div class="card">
+<b>① 평균만 인용</b> — 평균 5ms + p99 2초 = 100명 중 1명은 2초 대기. 결과서엔 항상 avg/p95/p99/max 세트.<br>
+<b>② Statistics 표 수치를 그대로 결과서에</b> — 램프업 포함 수치다. summarize-jtl.sh로 정상상태 재계산.<br>
+<b>③ 발생기 에러를 서버 탓으로</b> — <code>Can't assign requested address</code>는 발생기 포트 고갈. 캘리브레이션 없이 낸 결론은 무효.<br>
+<b>④ TPS 그래프만 보고 합격 선언</b> — TPS는 타이머가 지켜준 것일 수 있다. 응답시간 추이가 진짜 성적표.<br>
+<b>⑤ 그래프 캡처 없이 숫자만 제출</b> — 증적 최소 세트는 TPS + Response Times Over Time 캡처 2장.
+</div>
+
+<footer>
+load-tester 프로젝트 문서 · 짝꿍 문서: REPORT-GUIDE.md(결과서 양식·합격 기준) / TESTING.md(실행법) / TUNING.md(커널) / FORMULAS.md(계산식)
+</footer>
+
+</main>
+</body>
+</html>
