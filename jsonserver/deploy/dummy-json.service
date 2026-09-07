@@ -3,6 +3,8 @@ Description=dummy-json load test target server
 After=network.target
 
 [Service]
+# 액세스 로그 파일 기록이 필요하면 -logdir 추가 (User가 쓸 수 있는 경로여야 함):
+#   ExecStart=/opt/dummy-json/dummy-json-linux-amd64 -port 18080 -logdir /opt/dummy-json/logs
 ExecStart=/opt/dummy-json/dummy-json-linux-amd64 -port 18080
 Restart=on-failure
 User=nobody

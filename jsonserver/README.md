@@ -32,7 +32,11 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 -port 18080        리슨 포트
 -accesslog         요청별 in/out 시각을 stdout에 기록 (비동기 버퍼,
                    과부하 시 로그를 버리고 처리량을 지킴 — 버린 수는 stderr에 집계)
+-logdir <경로>     stdout 대신 <경로>/access_YYYYMMDD_HHMMSS.log 파일에 기록
+                   (기동 시각으로 파일명 생성 — 재기동마다 새 파일. -accesslog 자동 포함)
 ```
+
+로그 한 줄 형식: `클라IP:포트 in=<epoch ms> out=<epoch ms> proc_us=<처리 μs> bytes=<수신 바이트>`
 
 ## 빌드 (macOS에서 크로스 컴파일)
 

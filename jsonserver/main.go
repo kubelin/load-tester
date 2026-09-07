@@ -33,13 +33,13 @@ var (
 	dropped atomic.Int64
 )
 
-// startAccessLogger writes access lines to stdout from a buffered channel so
+// startAccessLogger writes access lines to out from a buffered channel so
 // request handlers never block on I/O. Lines are dropped (and counted) if the
 // channel fills up — throughput is protected over log completeness.
-func startAccessLogger() {
+func startAccessLogger(out *os.File) {
 	logCh = make(chan string, 65536)
 	go func() {
-		w := bufio.NewWriterSize(os.Stdout, 256*1024)
+		w := bufio.NewWriterSize(out, 256*1024)
 		flush := time.NewTicker(200 * time.Millisecond)
 		defer flush.Stop()
 		for {
@@ -58,11 +58,23 @@ func startAccessLogger() {
 
 func main() {
 	port := flag.Int("port", 18080, "listen port")
-	accessLog := flag.Bool("accesslog", false, "print per-request in/out times to stdout (async, may drop under load)")
+	accessLog := flag.Bool("accesslog", false, "record per-request in/out times (async, may drop under load)")
+	logDir := flag.String("logdir", "", "write access log to <logdir>/access_YYYYMMDD_HHMMSS.log instead of stdout (implies -accesslog)")
 	flag.Parse()
 
-	if *accessLog {
-		startAccessLogger()
+	if *logDir != "" {
+		if err := os.MkdirAll(*logDir, 0o755); err != nil {
+			log.Fatalf("logdir: %v", err)
+		}
+		name := fmt.Sprintf("%s/access_%s.log", *logDir, time.Now().Format("20060102_150405"))
+		f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			log.Fatalf("logdir: %v", err)
+		}
+		startAccessLogger(f)
+		log.Printf("access log -> %s", name)
+	} else if *accessLog {
+		startAccessLogger(os.Stdout)
 	}
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
