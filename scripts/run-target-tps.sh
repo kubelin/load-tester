@@ -27,3 +27,13 @@ JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t target-tps.jmx \
 echo ""
 echo "판정: 위 'summary +' 정상상태 구간이 목표 ${TPS}/s에 근접하고 Err 0%면 성공."
 echo "      달성률이 크게 낮으면 → 스레드 부족(응답 느림) 또는 발생기/서버 한계. TESTING.md 참고."
+
+# REPORT=1 이면 HTML 리포트까지 생성 (대량 샘플이면 수십 초 소요)
+if [ "${REPORT:-0}" = "1" ]; then
+  echo ""
+  echo "HTML 리포트 생성 중... → results/report_$TAG/index.html"
+  jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null
+else
+  echo "HTML 리포트: jmeter -g results/result_$TAG.jtl -o results/report_$TAG/"
+  echo "            (또는 다음부터 REPORT=1 ./scripts/run-target-tps.sh ... 로 자동 생성)"
+fi
