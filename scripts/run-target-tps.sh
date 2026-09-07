@@ -41,8 +41,9 @@ echo "      달성률이 크게 낮으면 → 스레드 부족(응답 느림) �
 if [ "${REPORT:-0}" = "1" ]; then
   echo ""
   echo "HTML 리포트 생성 중... → results/report_$TAG/index.html"
-  jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null
+  rm -rf "results/report_$TAG"
+  JVM_ARGS="-Xms1g -Xmx6g" jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null
 else
-  echo "HTML 리포트: jmeter -g results/result_$TAG.jtl -o results/report_$TAG/"
+  echo "HTML 리포트: JVM_ARGS=-Xmx6g jmeter -g results/result_$TAG.jtl -o results/report_$TAG/"
   echo "            (또는 다음부터 REPORT=1 ./scripts/run-target-tps.sh ... 로 자동 생성)"
 fi

@@ -39,7 +39,8 @@ echo ""
 echo "판정: 정상상태 TPS가 예상치에 근접 + Err 0% + 응답시간 안정 → 해당 vUser 수용 가능."
 if [ "${REPORT:-0}" = "1" ]; then
   echo "HTML 리포트 생성 중... → results/report_$TAG/index.html"
-  jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null
+  rm -rf "results/report_$TAG"
+  JVM_ARGS="-Xms1g -Xmx6g" jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null
 else
-  echo "HTML 리포트: jmeter -g results/result_$TAG.jtl -o results/report_$TAG/"
+  echo "HTML 리포트: JVM_ARGS=-Xmx6g jmeter -g results/result_$TAG.jtl -o results/report_$TAG/"
 fi

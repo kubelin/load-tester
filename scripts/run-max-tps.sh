@@ -54,11 +54,12 @@ if [ "${REPORT:-0}" = "1" ]; then
   for T in "${STAGES[@]}"; do
     TAG="${RUN}_t${T}"
     echo "HTML 리포트 생성: results/report_$TAG/index.html"
-    jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null 2>&1 \
+    rm -rf "results/report_$TAG"
+    JVM_ARGS="-Xms1g -Xmx6g" jmeter -g "results/result_$TAG.jtl" -o "results/report_$TAG" >/dev/null 2>&1 \
       || echo "  (생성 실패 — results/result_$TAG.jtl 확인)"
   done
 else
   echo ""
-  echo "HTML 리포트(단계별): jmeter -g results/result_${RUN}_t<스레드>.jtl -o results/report_t<스레드>/"
+  echo "HTML 리포트(단계별): JVM_ARGS=-Xmx6g jmeter -g results/result_${RUN}_t<스레드>.jtl -o results/report_t<스레드>/"
   echo "                   (또는 REPORT=1 ./scripts/run-max-tps.sh ... 로 전 단계 자동 생성)"
 fi
