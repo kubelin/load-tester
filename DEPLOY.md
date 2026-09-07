@@ -99,17 +99,14 @@ curl -s http://<서버VM IP>:18080/health   # → OK (안 되면 방화벽부터
 
 ## 4. 캘리브레이션 — 발생기·환경 한계 실측 (본 테스트 전 필수)
 
-발생기 VM의 load-tester 폴더에서:
+발생기 VM의 load-tester 폴더에서 (목표 TPS를 넘기면 합격/불합격까지 자동 판정):
 
 ```bash
-# 최대 발생 능력 측정 (200스레드 무휴식, 서버 응답이 빠르므로 환경 전체의 상한이 나옴)
-JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t echo-load.jmx \
-  -Jhost=<서버VM IP> -Jport=18080 -Jthreads=200 -Jrampup=5 -Jduration=60 -Jthinkms=0 \
-  -l calib.jtl
+./scripts/run-calibration.sh <서버VM IP> 18080 10000
 ```
 
-**판정**: `summary` 정상상태 TPS가 **본 테스트 목표의 1.3배 이상**이면 통과.
-(예: 목표 1만 TPS → 캘리브레이션에서 1.3만+ 나와야 함)
+**판정**: 정상상태 발생 능력이 **본 테스트 목표의 1.3배 이상**이면 통과.
+(예: 목표 1만 TPS → 캘리브레이션에서 1.3만+ 나와야 함 — 스크립트가 판정 출력)
 미달이면 측정이 오염되므로 원인(발생기 CPU, 네트워크, 커널 설정)을 먼저 해소한다.
 테스트 중 서버 VM에서 `top`으로 CPU와 `%st`(steal)도 함께 확인.
 

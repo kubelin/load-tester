@@ -1,4 +1,6 @@
 #!/bin/bash
+# [로컬 전용] 발생기 머신 단독 정밀 캘리브레이션 — 더미 서버를 이 머신에 직접 띄워 5단계 측정.
+# 원격 서버 대상 캘리브레이션(회사 VM 워크플로)은 scripts/run-calibration.sh 사용.
 # JMeter load-generator calibration: find this Mac's limits before real tests.
 # Stage 1 (200 threads, no think time)  -> max RPS ceiling
 # Stages 2-5 (1000..5000 threads, 1s think time) -> thread-count ceiling

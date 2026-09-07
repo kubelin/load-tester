@@ -26,7 +26,7 @@ for T in "${STAGES[@]}"; do
     -Jduration="$DUR" -Jthinkms=0 \
     -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary" | tail -3
   # 정상상태 TPS = 'summary +' 구간들 중 최대값 (램프업/종료 구간 왜곡 배제)
-  RATE=$(grep "^summary +" "results/jmeter_$TAG.log" 2>/dev/null \
+  RATE=$(grep "summary +" "results/jmeter_$TAG.log" 2>/dev/null \
     | grep -oE '= *[0-9.]+/s' | grep -oE '[0-9.]+' | sort -rn | head -1)
   REPORT+=("${T} threads → ${RATE:-?}/s")
   sleep 5
