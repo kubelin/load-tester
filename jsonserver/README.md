@@ -41,30 +41,7 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
 ```
 
-| `GET /health` | 헬스체크 (`OK`) |
-
-### /custom 규격 수정 방법
-
-`custom.go` 한 파일만 수정하면 된다 (main.go 불변). 파일 안에 세 구역이 표시돼 있다:
-
-- **[구멍 1]** 요청 규격 — 받을 JSON의 header/body 구조체
-- **[구멍 2]** 응답 규격 — 돌려줄 JSON의 구조체 (inTime/outTime/procUs는 자동 주입)
-- **[구멍 3]** 처리 로직 — 요청을 보고 응답 채우기 (resCode 분기, `time.Sleep` 지연 등)
-
-수정 후 컴파일: `go build -o dummy-json .` (문법은 GO-GUIDE.md 참고)
-
-요청/응답 예:
-
-```json
-// 요청
-{"header":{"txId":"TX-0001","svcCode":"ORD"},"body":{"orderId":"ORD-123","amount":45000}}
-// 응답 (시간 필드는 서버가 자동으로 채움)
-{"header":{"txId":"TX-0001","resCode":"0000","resMsg":"SUCCESS",
-           "inTime":"...","outTime":"...","procUs":220},
- "body":{"orderId":"ORD-123","status":"OK"}}
-```
-
-응답 예:
+### /echo 응답 예
 
 ```json
 {
