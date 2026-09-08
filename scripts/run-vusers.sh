@@ -13,7 +13,7 @@ THINK=${4:-1000}
 DURATION=${5:-300}
 
 RAMP=$(( USERS / 100 )); [ "$RAMP" -lt 10 ] && RAMP=10
-EXPECT=$(( THINK > 0 ? USERS * 1000 / THINK : 0 ))   # 예상 TPS ≈ vUser ÷ think(초)
+EXPECT=0; [ "$THINK" -gt 0 ] && EXPECT=$(( USERS * 1000 / THINK ))   # 예상 TPS ≈ vUser ÷ think(초)
 
 ulimit -n 65536
 
