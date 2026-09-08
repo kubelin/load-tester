@@ -9,6 +9,26 @@ dummy-json 서버(또는 실제 대상)에 대해 목적별로 테스트를 실�
 | 2. 최대 TPS | "몇 TPS까지 가능한가" 탐색 | `echo-load.jmx` + `run-max-tps.sh` | 무제한 연타, 단계 증가 |
 | 3. Agent(분산) | 발생기 1대 한계 초과 부하 | `jmeter-server` + 마스터 `-R` | 에이전트 N대 합산 |
 
+### 어떤 jmx를 쓸까 — 엔드포인트 × 부하 모델 매핑
+
+모든 실행 스크립트는 `PLAN=<jmx>` 환경변수로 플랜을 갈아끼울 수 있다.
+
+| | `/echo` (단순 에코 — 인프라 측정용) | `/custom` (사내 규격 — 결과서용) |
+|---|---|---|
+| **폐쇄 루프** (vusers/max/multi/calibration) | `echo-load.jmx` (기본값) | `PLAN=custom-load.jmx` |
+| **고정 TPS** (run-target-tps) | `target-tps.jmx` (기본값) | `PLAN=custom-target-tps.jmx` |
+
+주의: 고정 TPS 모드에 `custom-load.jmx`를 쓰면 안 된다 — 페이싱 타이머가 없어 목표
+TPS 제어가 되지 않는다. 반대로 `custom-target-tps.jmx`를 vUser 모드에 쓰면 think time
+대신 타이머가 개입해 의도와 달라진다. **표의 짝 그대로 쓸 것.**
+
+```bash
+# 예: 사내 규격으로 1만 TPS 유지 검증
+PLAN=custom-target-tps.jmx ./scripts/run-target-tps.sh 10000 <서버IP> 18080 300
+# 예: 사내 규격으로 vUser 9,000명
+PLAN=custom-load.jmx ./scripts/run-vusers.sh 9000 <서버IP> 18080 1000 300
+```
+
 ---
 
 ## 1. 고정 TPS 모드 — 1만 TPS 설정 및 가이드
