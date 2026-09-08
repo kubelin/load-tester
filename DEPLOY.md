@@ -49,28 +49,29 @@ cd load-tester
 
 ## 2. 서버 VM — dummy-json 배포
 
+**권장: 레포 폴더에서 그대로 실행한다** — 별도 복사본을 만들면 pull 해도 그 사본은
+안 바뀌어서 구버전 바이너리 사고가 난다 (`flag provided but not defined` 류 에러의 원인).
+
 ```bash
-# 2-1. 바이너리 배치 (정적 빌드라 설치 과정 없음)
-mkdir -p /opt/dummy-json
-cp jsonserver/dummy-json-linux-amd64 /opt/dummy-json/
-chmod +x /opt/dummy-json/dummy-json-linux-amd64
+# 2-1. 기동 — 방법 A: server.sh (권장. ulimit·백그라운드·logs/ 자동)
+cd load-tester/jsonserver
+./server.sh start 18080        # logs/는 "실행한 현재 폴더"에 생성
+./server.sh status / stop      # 관리
 
-# 2-2. 기동 — 방법 A: 수동 (간단 테스트용)
-ulimit -n 65536
-/opt/dummy-json/dummy-json-linux-amd64 -port 18080 &
-
-# 2-2. 기동 — 방법 B: systemd (권장, LimitNOFILE 자동 적용)
+# 2-1. 기동 — 방법 B: systemd (상시 유지·재부팅 생존 필요시)
+#   유닛의 ExecStart 경로를 레포 위치로 맞춘 뒤:
 sudo cp jsonserver/deploy/dummy-json.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now dummy-json
+sudo systemctl daemon-reload && sudo systemctl enable --now dummy-json
 
-# 2-3. 동작 확인 (서버 VM 자신에서)
+# 2-2. 동작 확인 (서버 VM 자신에서)
 curl -s http://127.0.0.1:18080/health          # → OK
-curl -s -X POST http://127.0.0.1:18080/echo -d '{"test":1}'   # → inTime/outTime JSON
+curl -s -X POST http://127.0.0.1:18080/custom -d '{"data":{"InRec1":{"USER_ID":"77"}}}'
+#   → rspCd/OutRec1 포함 응답이면 최신 바이너리 (없으면 구버전 — git pull 확인)
 ```
 
-JSON 규격 수정이 필요해지면: `jsonserver/main.go` 수정 → 재빌드(GO-GUIDE.md 0장,
-폐쇄망 내 빌드는 offline/README.md) → 바이너리 교체 → restart.
+JSON 규격 수정이 필요해지면: `jsonserver/custom.go`의 [구멍 1~3] 수정 → 재빌드
+(GO-GUIDE.md 0장, 폐쇄망 내 빌드는 offline/README.md) → `./server.sh stop && start`.
+부득이 /opt 등에 사본을 두는 정책이면 **pull 할 때마다 바이너리 재복사**를 세트로.
 
 ---
 
