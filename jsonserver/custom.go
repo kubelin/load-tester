@@ -15,52 +15,80 @@ import (
 )
 
 // ============================================================================
-// [구멍 1] 요청 규격 — 받을 JSON의 header/body 필드를 여기에 정의
+// [구멍 1] 요청 규격 — 받을 JSON의 header/data 필드를 여기에 정의
 //   - 필드명은 반드시 대문자로 시작 (소문자면 JSON에서 안 읽힘)
 //   - `json:"..."` 태그가 실제 JSON 키 이름 (GO-GUIDE.md 2장 참고)
 // ============================================================================
 
 type CustomReqHeader struct {
-	TxID    string `json:"txId"`
-	SvcCode string `json:"svcCode"`
-	// TODO: 필요한 요청 header 필드 추가
+	MdSect           string `json:"mdSect"`
+	SvcID            string `json:"svcId"`
+	UuID             string `json:"uuId"`
+	TlgrPrgsNo       string `json:"tlgrPrgsNo"`
+	UserIpAddr       string `json:"userIpAddr"`
+	SmpNtcTrdgSect   string `json:"smpNtcTrdgSect"`
+	TrdgDt           string `json:"trdgDt"`
+	PcRqstTime       string `json:"pcRqstTime"`
+	ClitRsrvPrt      string `json:"clitRsrvPrt"`
+	TestSect         string `json:"testSect"`
+	UserID           string `json:"userId"`
+	MacAddr          string `json:"macAddr"`
+	LangTyp          string `json:"langTyp"`
+	ScrnNo1          string `json:"scrnNo1"`
+	ScrnNo2          string `json:"scrnNo2"`
+	UserIpAddrTelno  string `json:"userIpAddrTelno"`
+	BrnhCd           string `json:"brnhCd"`
+	UpprDprtCd       string `json:"upprDprtCd"`
+	AcngUnitCd       string `json:"acngUnitCd"`
+	PrevAfteRqstSect string `json:"prevAfteRqstSect"`
+	PrevAfteDtaSect  string `json:"prevAfteDtaSect"`
+	DprtSectCd       string `json:"dprtSectCd"`
 }
 
-type CustomReqBody struct {
-	OrderID string `json:"orderId"`
-	Amount  int64  `json:"amount"`
-	// TODO: 필요한 요청 body 필드 추가
+type InRec1 struct {
+	UserPswd string `json:"USER_PSWD"`
+	UserID   string `json:"USER_ID"`
+	EmalAdrs string `json:"EMAL_ADRS"`
+	UserIP   string `json:"USER_IP"`
+	Mac      string `json:"MAC"`
+}
+
+type CustomReqData struct {
+	InRec1 InRec1 `json:"InRec1"`
 }
 
 type CustomRequest struct {
 	Header CustomReqHeader `json:"header"`
-	Body   CustomReqBody   `json:"body"`
+	Data   CustomReqData   `json:"data"`
 }
 
 // ============================================================================
-// [구멍 2] 응답 규격 — 돌려줄 JSON의 header/body 필드를 여기에 정의
-//   - InTime/OutTime/ProcUs 는 배관부가 자동으로 채운다 (지우지 말 것)
+// [구멍 2] 응답 규격 — 돌려줄 JSON의 header/data 필드를 여기에 정의
+//   - 응답 header = 요청 header 전체 에코(임베딩) + 결과/시간 필드
+//   - ResCode/ResMsg 는 [구멍 3]에서, InTime/OutTime/ProcUs 는 배관부가 채운다 (지우지 말 것)
 // ============================================================================
 
 type CustomResHeader struct {
-	TxID    string `json:"txId"`    // 배관부가 요청의 txId를 복사해줌
-	ResCode string `json:"resCode"` // [구멍 3]에서 채움
-	ResMsg  string `json:"resMsg"`  // [구멍 3]에서 채움
-	InTime  string `json:"inTime"`  // 자동: 요청 수신 시각 (RFC3339Nano)
-	OutTime string `json:"outTime"` // 자동: 응답 직전 시각
-	ProcUs  int64  `json:"procUs"`  // 자동: 서버 처리시간 (μs)
-	// TODO: 필요한 응답 header 필드 추가
+	CustomReqHeader        // 요청 header 필드 전체가 같은 이름으로 펼쳐져 에코됨
+	RspCd           string `json:"rspCd"`   // 응답 코드 ("0000" = 정상)
+	RspMsg          string `json:"rspMsg"`  // 응답 메시지
+	InTime          string `json:"inTime"`  // 자동: 요청 수신 시각 (RFC3339Nano)
+	OutTime         string `json:"outTime"` // 자동: 응답 직전 시각
+	ProcUs          int64  `json:"procUs"`  // 자동: 서버 처리시간 (μs)
 }
 
-type CustomResBody struct {
-	OrderID string `json:"orderId"`
-	Status  string `json:"status"`
-	// TODO: 필요한 응답 body 필드 추가
+type OutRec1 struct {
+	UserID string `json:"USER_ID"`
+	Status string `json:"STATUS"`
+}
+
+type CustomResData struct {
+	OutRec1 OutRec1 `json:"OutRec1"`
 }
 
 type CustomResponse struct {
 	Header CustomResHeader `json:"header"`
-	Body   CustomResBody   `json:"body"`
+	Data   CustomResData   `json:"data"`
 }
 
 // ============================================================================
@@ -70,16 +98,18 @@ type CustomResponse struct {
 // ============================================================================
 
 func processCustom(req *CustomRequest, res *CustomResponse) {
-	// 기본 예시 로직: 정상 응답 + 주문번호 에코
-	res.Header.ResCode = "0000"
-	res.Header.ResMsg = "SUCCESS"
-	res.Body.OrderID = req.Body.OrderID
-	res.Body.Status = "OK"
+	res.Header.CustomReqHeader = req.Header // 요청 header 그대로 에코
 
-	// TODO: 여기에 실제 로직 작성. 예)
-	// if req.Body.Amount > 1000000 {
-	//     res.Header.ResCode = "4001"
-	//     res.Header.ResMsg = "LIMIT_EXCEEDED"
+	res.Header.RspCd = "0000"
+	res.Header.RspMsg = "정상"
+	res.Data.OutRec1.UserID = req.Data.InRec1.UserID // 입력받은 USER_ID 그대로
+	res.Data.OutRec1.Status = "정상"
+
+	// TODO: 실제 로직이 필요하면 여기에. 예)
+	// if req.Data.InRec1.UserID == "" {
+	//     res.Header.RspCd = "4001"
+	//     res.Header.RspMsg = "USER_ID 누락"
+	//     res.Data.OutRec1.Status = "오류"
 	// }
 	// time.Sleep(50 * time.Millisecond)   // DB 50ms 흉내
 }
@@ -99,10 +129,9 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	var req CustomRequest
 	var res CustomResponse
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&req); err != nil {
-		res.Header.ResCode = "9999"
-		res.Header.ResMsg = "INVALID_JSON: " + err.Error()
+		res.Header.RspCd = "9999"
+		res.Header.RspMsg = "INVALID_JSON: " + err.Error()
 	} else {
-		res.Header.TxID = req.Header.TxID
 		processCustom(&req, &res)
 	}
 

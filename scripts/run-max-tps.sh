@@ -30,7 +30,7 @@ for T in "${STAGES[@]}"; do
   RAMP=5
   echo ""
   echo "--- ${T} threads ---"
-  JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t echo-load.jmx \
+  JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t "${PLAN:-echo-load.jmx}" \
     -Jhost="$HOST" -Jport="$PORT" -Jthreads="$T" -Jrampup="$RAMP" \
     -Jduration="$DUR" -Jthinkms=0 \
     -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary" | tail -3

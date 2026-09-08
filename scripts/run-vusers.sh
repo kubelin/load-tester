@@ -30,7 +30,7 @@ TAG="vusers${USERS}_$(date +%m%d%H%M%S)"
 
 echo "=== vUser ${USERS}명 | think ${THINK}ms | ${HOST}:${PORT} | ${DURATION}s ==="
 [ "$EXPECT" -gt 0 ] && echo "    예상 TPS ≈ ${EXPECT}/s (FORMULAS.md ①: vUser ÷ (RT+think))"
-JVM_ARGS="-Xms2g -Xmx8g -Xss256k" jmeter -n -t echo-load.jmx \
+JVM_ARGS="-Xms2g -Xmx8g -Xss256k" jmeter -n -t "${PLAN:-echo-load.jmx}" \
   -Jhost="$HOST" -Jport="$PORT" -Jthreads="$USERS" -Jrampup="$RAMP" \
   -Jduration="$DURATION" -Jthinkms="$THINK" \
   -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary"

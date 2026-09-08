@@ -22,6 +22,37 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 
 수정 후 컴파일: `go build -o dummy-json .` (문법은 GO-GUIDE.md 참고)
 
+요청/응답 예 (사내 전문 규격 — header 22필드 + data.InRec1):
+
+```json
+// 요청
+{"header":{"mdSect":"H55","svcId":"uwa0000p","uuId":"...","userId":"TD7277", ...},
+ "data":{"InRec1":{"USER_PSWD":"1234","USER_ID":"1234","EMAL_ADRS":"","USER_IP":"111","MAC":"111"}}}
+// 응답 — 요청 header 전체 에코 + 결과/시간 필드, data는 USER_ID/STATUS 반환
+{"header":{ ...요청 header 에코..., "rspCd":"0000","rspMsg":"정상",
+            "inTime":"...","outTime":"...","procUs":450},
+ "data":{"OutRec1":{"USER_ID":"1234","STATUS":"정상"}}}
+```
+
+부하 플랜: 루트의 `custom-load.jmx` (uuId/시각/USER_ID 자동 생성, rspCd 0000 검증 포함).
+실행 스크립트에 `PLAN=custom-load.jmx` 를 붙이면 이 규격으로 부하를 건다:
+
+```bash
+PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
+```
+
+| `GET /health` | 헬스체크 (`OK`) |
+
+### /custom 규격 수정 방법
+
+`custom.go` 한 파일만 수정하면 된다 (main.go 불변). 파일 안에 세 구역이 표시돼 있다:
+
+- **[구멍 1]** 요청 규격 — 받을 JSON의 header/body 구조체
+- **[구멍 2]** 응답 규격 — 돌려줄 JSON의 구조체 (inTime/outTime/procUs는 자동 주입)
+- **[구멍 3]** 처리 로직 — 요청을 보고 응답 채우기 (resCode 분기, `time.Sleep` 지연 등)
+
+수정 후 컴파일: `go build -o dummy-json .` (문법은 GO-GUIDE.md 참고)
+
 요청/응답 예:
 
 ```json

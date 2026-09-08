@@ -28,7 +28,7 @@ echo "=== 캘리브레이션 | ${HOST}:${PORT} | 200스레드 무휴식 ${DUR}s 
 curl -sf -m 3 "http://${HOST}:${PORT}/health" >/dev/null \
   || { echo "서버 응답 없음 — 배포/방화벽 확인 (DEPLOY.md 2·3장)"; exit 1; }
 
-JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t echo-load.jmx \
+JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t "${PLAN:-echo-load.jmx}" \
   -Jhost="$HOST" -Jport="$PORT" -Jthreads=200 -Jrampup=5 \
   -Jduration="$DUR" -Jthinkms=0 \
   -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary"
