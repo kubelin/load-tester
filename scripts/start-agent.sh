@@ -9,9 +9,10 @@ MYIP=${1:?사용법: start-agent.sh <이 에이전트 머신의 IP>}
 
 ulimit -n 65536
 
-JMAJ=$(java -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
+JBIN=java; [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ] && JBIN="$JAVA_HOME/bin/java"
+JMAJ=$("$JBIN" -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
 if [ "${JMAJ:-0}" -lt 17 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
-  echo "오류: $(java -version 2>&1 | head -1) — JDK 17 필요 (DEPLOY.md 3장)"; exit 1
+  echo "오류: $("$JBIN" -version 2>&1 | head -1) — JDK 17 필요 (DEPLOY.md 3장)"; exit 1
 fi
 
 echo "=== JMeter 에이전트 기동: ${MYIP}:1099 (마스터가 -R ${MYIP} 로 접속) ==="

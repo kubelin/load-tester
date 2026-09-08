@@ -22,9 +22,10 @@ PORT=${4:-18080}
 N=$(( $(echo "$AGENTS" | tr -cd ',' | wc -c) + 1 ))
 ulimit -n 65536
 
-JMAJ=$(java -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
+JBIN=java; [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ] && JBIN="$JAVA_HOME/bin/java"
+JMAJ=$("$JBIN" -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
 if [ "${JMAJ:-0}" -lt 17 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
-  echo "오류: $(java -version 2>&1 | head -1) — JDK 17 필요 (DEPLOY.md 3장)"; exit 1
+  echo "오류: $("$JBIN" -version 2>&1 | head -1) — JDK 17 필요 (DEPLOY.md 3장)"; exit 1
 fi
 
 mkdir -p results
