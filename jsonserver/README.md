@@ -10,7 +10,18 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 | `POST /echo` | JSON 바디를 받아 시각 스탬프와 함께 에코 |
 | `POST /echo?delay=50ms` | 처리 지연 시뮬레이션 (Go duration 형식, 최대 30s) |
 | `POST /custom` | **커스텀 header/body 규격** — `custom.go`의 수정 구역([구멍 1~3])에서 규격·로직을 직접 정의 |
+| `POST /custom?delay=200ms` | 백엔드 처리 지연 시뮬레이션 (in-flight 유지 → 커넥션/버퍼 누적 정찰) |
+| `POST /custom?respKB=5120` | 응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박) |
 | `GET /health` | 헬스체크 (`OK`) |
+
+### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)
+
+`?delay=` 와 `?respKB=` 는 조합 가능하며, 게이트웨이가 쿼리스트링을 백엔드로 전달해야 적용된다.
+관련 부하 플랜(루트):
+- `custom-payload.jmx` — `-Jrespkb=<KB> -Jdelayms=<ms>` : **응답 바디** 팽창(서버 생성) + 지연
+- `custom-reqbody.jmx` — `-Jreqbytes=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤)
+
+응답 팽창은 서버(Go)가, 요청 팽창은 발생기(JMeter)가 만든다 — 데이터를 생성하는 쪽이 다르기 때문.
 
 ### /custom 규격 수정 방법
 

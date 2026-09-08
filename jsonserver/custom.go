@@ -10,7 +10,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -72,9 +75,10 @@ type CustomResHeader struct {
 	CustomReqHeader        // 요청 header 필드 전체가 같은 이름으로 펼쳐져 에코됨
 	RspCd           string `json:"rspCd"`   // 응답 코드 ("0000" = 정상)
 	RspMsg          string `json:"rspMsg"`  // 응답 메시지
-	InTime          string `json:"inTime"`  // 자동: 요청 수신 시각 (RFC3339Nano)
-	OutTime         string `json:"outTime"` // 자동: 응답 직전 시각
-	ProcUs          int64  `json:"procUs"`  // 자동: 서버 처리시간 (μs)
+	InTime          string `json:"inTime"`         // 자동: 요청 수신 시각 (RFC3339Nano)
+	OutTime         string `json:"outTime"`        // 자동: 응답 직전 시각
+	ProcUs          int64  `json:"procUs"`         // 자동: 서버 처리시간 (μs)
+	Pad             string `json:"_pad,omitempty"` // 자동: ?respKB= 응답 팽창용 (지우지 말 것)
 }
 
 type OutRec1 struct {
@@ -123,16 +127,33 @@ func init() {
 	http.HandleFunc("/custom", customHandler)
 }
 
+// customMaxBody: /custom 은 큰 요청 바디(부하 정찰용)를 받을 수 있도록 넉넉히 (64MB).
+const customMaxBody = 64 << 20
+
 func customHandler(w http.ResponseWriter, r *http.Request) {
 	in := time.Now()
 
 	var req CustomRequest
 	var res CustomResponse
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, customMaxBody)).Decode(&req); err != nil {
 		res.Header.RspCd = "9999"
 		res.Header.RspMsg = "INVALID_JSON: " + err.Error()
 	} else {
 		processCustom(&req, &res)
+	}
+
+	// 부하 정찰 레버 (쿼리 파라미터, 게이트웨이가 백엔드로 전달해야 함):
+	//   ?delay=200ms  서버 처리 지연 (in-flight 유지 → 커넥션/버퍼 누적)
+	//   ?respKB=5120  응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박)
+	if d := r.URL.Query().Get("delay"); d != "" {
+		if dur, perr := time.ParseDuration(d); perr == nil && dur > 0 && dur <= 30*time.Second {
+			time.Sleep(dur)
+		}
+	}
+	if q := r.URL.Query().Get("respKB"); q != "" {
+		if kb, perr := strconv.Atoi(q); perr == nil && kb > 0 && kb <= 65536 {
+			res.Header.Pad = strings.Repeat("x", kb*1024)
+		}
 	}
 
 	out := time.Now()
@@ -143,4 +164,14 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	buf, _ := json.Marshal(res)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(buf)
+
+	if logCh != nil {
+		line := fmt.Sprintf("%s in=%d out=%d proc_us=%d bytes=%d\n",
+			r.RemoteAddr, in.UnixMilli(), out.UnixMilli(), res.Header.ProcUs, r.ContentLength)
+		select {
+		case logCh <- line:
+		default:
+			dropped.Add(1)
+		}
+	}
 }
