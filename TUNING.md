@@ -245,6 +245,7 @@ sudo sysctl --system
 ```bash
 ulimit -Sn; ulimit -Hn; ulimit -Su
 sysctl fs.file-max fs.nr_open kernel.threads-max kernel.pid_max vm.max_map_count
+systemctl show user-$(id -u).slice --property=TasksMax   # cgroup 스레드 한도 (6-2 C)
 sysctl net.ipv4.ip_local_port_range net.ipv4.tcp_tw_reuse net.ipv4.tcp_fin_timeout
 sysctl net.core.rmem_max net.core.wmem_max net.netfilter.nf_conntrack_max
 ```
