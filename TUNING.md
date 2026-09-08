@@ -289,6 +289,23 @@ net.netfilter.nf_conntrack_max = 262144
 <jmeter실행계정>  hard  nproc   65536
 ```
 
+**C. systemd TasksMax — A·B와 별개의 세 번째 계층 (SSH 세션의 cgroup 스레드 한도)**
+
+sysctl과 limits.d를 다 올려도 systemd가 로그인 세션(cgroup) 단위로 스레드 수를
+따로 제한할 수 있다. 기본값이 1만 근처인 배포판이 있어 **"8천은 되는데 1만은 안 되는"
+증상의 단골 원인**. 확인:
+
+```bash
+systemctl show user-$(id -u).slice --property=TasksMax   # infinity 또는 65536+ 이어야 함
+```
+
+숫자가 작게 나오면 요청 항목:
+
+```
+/etc/systemd/logind.conf 에  UserTasksMax=65536  설정 후 systemd-logind 재시작
+(또는 systemctl set-property user-<uid>.slice TasksMax=infinity)
+```
+
 ### 6-3. 적용 확인
 
 변경 후 발생기 VM에서 다시:

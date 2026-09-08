@@ -42,6 +42,16 @@ check "ulimit -u (nproc)"            "$(ulimit -Su)"                            
 check "kernel.threads-max"           "$(sysctl -n kernel.threads-max 2>/dev/null)"    100000 ge
 check "kernel.pid_max"               "$(sysctl -n kernel.pid_max 2>/dev/null)"        100000 ge
 check "vm.max_map_count"             "$(sysctl -n vm.max_map_count 2>/dev/null)"      262144 ge
+TM=$(systemctl show "user-$(id -u).slice" --property=TasksMax 2>/dev/null | cut -d= -f2)
+if [ -z "$TM" ]; then
+  printf "  [정보]    %-38s (systemd 미지원 환경 — 해당 없음)\n" "systemd TasksMax(cgroup)"
+elif [ "$TM" = "infinity" ] || [ "${TM:-0}" -ge 65536 ] 2>/dev/null; then
+  printf "  [OK]     %-38s 현재=%-16s 권장=infinity 또는 65536+\n" "systemd TasksMax(cgroup)" "$TM"; pass=$((pass+1))
+else
+  printf "  [변경필요] %-36s 현재=%-16s 권장=infinity 또는 65536+\n" "systemd TasksMax(cgroup)" "$TM"
+  echo "            → limits.d/sysctl과 별개의 systemd 계층. TUNING.md 6-2 C항목으로 요청"
+  fail=$((fail+1))
+fi
 
 echo ""
 echo "--- 3. 임시 포트 / TIME_WAIT (신규 커넥션 발생 능력)"
