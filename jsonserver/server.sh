@@ -1,10 +1,11 @@
 #!/bin/bash
-# dummy-json 서버 기동/중지 스크립트 — 로그는 전부 ./logs/ 에 쌓인다.
+# dummy-json 서버 기동/중지 스크립트
+# 로그(logs/)와 pid는 "명령을 실행한 현재 폴더"에 쌓이고, 바이너리는 스크립트 옆에서 찾는다.
 # 사용법: ./server.sh start [포트]   (기본 18080)
 #         ./server.sh stop
 #         ./server.sh status
 set -uo pipefail
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 CMD=${1:-status}
 PORT=${2:-18080}
@@ -12,8 +13,8 @@ PIDFILE=logs/server.pid
 
 # OS에 맞는 바이너리 선택 (RHEL: linux-amd64, 맥 로컬 테스트: darwin)
 case "$(uname -s)" in
-  Linux)  BIN=./dummy-json-linux-amd64 ;;
-  Darwin) BIN=./dummy-json-darwin ;;
+  Linux)  BIN="$SCRIPT_DIR/dummy-json-linux-amd64" ;;
+  Darwin) BIN="$SCRIPT_DIR/dummy-json-darwin" ;;
   *) echo "지원하지 않는 OS"; exit 1 ;;
 esac
 [ -x "$BIN" ] || { echo "바이너리 없음: $BIN (README.md 빌드 참고)"; exit 1; }
