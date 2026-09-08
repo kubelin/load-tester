@@ -23,7 +23,12 @@ running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 case "$CMD" in
   start)
     if running; then echo "이미 실행 중 (pid $(cat "$PIDFILE"))"; exit 0; fi
-    mkdir -p logs
+    if ! mkdir -p logs 2>/dev/null || ! touch logs/.w 2>/dev/null; then
+      echo "오류: 현재 위치($(pwd))에 logs/ 를 만들 권한이 없다."
+      echo "  해결: sudo chown -R \$(whoami) $(pwd)   또는 홈 디렉터리로 옮겨 실행"
+      exit 1
+    fi
+    rm -f logs/.w
     ulimit -n 65536
     TS=$(date +%Y%m%d_%H%M%S)
     nohup "$BIN" -port "$PORT" -logdir logs > "logs/server_$TS.log" 2>&1 &
