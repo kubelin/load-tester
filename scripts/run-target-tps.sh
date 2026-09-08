@@ -31,7 +31,7 @@ TAG="target${TPS}_$(date +%m%d%H%M%S)"
 echo "=== 목표 ${TPS} TPS | host=${HOST}:${PORT} threads=${THREADS} duration=${DURATION}s ==="
 JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t "${PLAN:-target-tps.jmx}" \
   -Jhost="$HOST" -Jport="$PORT" -Jtpm="$TPM" \
-  -Jthreads="$THREADS" -Jrampup="$RAMP" -Jduration="$DURATION" \
+  -Jthreads="$THREADS" -Jrampup="$RAMP" -Jduration="$DURATION" ${EXTRA_JOPTS:-} \
   -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary"
 
 echo ""

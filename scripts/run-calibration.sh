@@ -31,7 +31,7 @@ curl -sf -m 3 "http://${HOST}:${PORT}/health" >/dev/null \
 
 JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t "${PLAN:-echo-load.jmx}" \
   -Jhost="$HOST" -Jport="$PORT" -Jthreads=200 -Jrampup=5 \
-  -Jduration="$DUR" -Jthinkms=0 \
+  -Jduration="$DUR" -Jthinkms=0 ${EXTRA_JOPTS:-} \
   -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary"
 
 # 정상상태 TPS = 'summary +' 구간 최대값 (짧은 실행이라 중간행이 없으면 'summary =' 전체 평균 사용)

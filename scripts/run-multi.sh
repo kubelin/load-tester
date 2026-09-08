@@ -39,7 +39,7 @@ for i in $(seq 1 "$INST"); do
   rm -f "results/result_$TAG.jtl"   # -l 은 기존 파일에 append 하므로 반드시 제거
   JVM_ARGS="-Xms2g -Xmx8g -Xss256k" jmeter -n -t "${PLAN:-echo-load.jmx}" \
     -Jhost="$HOST" -Jport="$PORT" -Jthreads="$PER" -Jrampup="$RAMP" \
-    -Jduration="$DURATION" -Jthinkms="$THINK" \
+    -Jduration="$DURATION" -Jthinkms="$THINK" ${EXTRA_JOPTS:-} \
     -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" \
     > "results/stdout_$TAG.txt" 2>&1 &
   PID=$!

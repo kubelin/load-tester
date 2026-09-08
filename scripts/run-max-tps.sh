@@ -33,7 +33,7 @@ for T in "${STAGES[@]}"; do
   echo "--- ${T} threads ---"
   JVM_ARGS="-Xms2g -Xmx6g -Xss256k" jmeter -n -t "${PLAN:-echo-load.jmx}" \
     -Jhost="$HOST" -Jport="$PORT" -Jthreads="$T" -Jrampup="$RAMP" \
-    -Jduration="$DUR" -Jthinkms=0 \
+    -Jduration="$DUR" -Jthinkms=0 ${EXTRA_JOPTS:-} \
     -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary" | tail -3
   # 정상상태 TPS = 'summary +' 구간들 중 최대값 (램프업/종료 구간 왜곡 배제)
   RATE=$(grep "summary +" "results/jmeter_$TAG.log" 2>/dev/null \
