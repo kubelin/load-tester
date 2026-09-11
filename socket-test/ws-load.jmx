@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="WebSocket Receive Load">
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <!-- 스레드 1개 = WebSocket 커넥션 1개. conns 로 동시 연결 수를 정한다 (수백~수천). -->
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="WS Connections">
+        <stringProp name="ThreadGroup.num_threads">${__P(conns,500)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller">
+          <intProp name="LoopController.loops">-1</intProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <!-- 연결 + (선택)구독: 스레드당 딱 한 번. 이후엔 이 연결로 계속 수신만 한다. -->
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Open + Subscribe (once per thread)">
+          <intProp name="OnceOnlyController.iterations">1</intProp>
+        </OnceOnlyController>
+        <hashTree>
+          <eu.luminis.jmeter.wssampler.OpenWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.OpenWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.OpenWebSocketSampler" testname="Open WS Connection">
+            <boolProp name="TLS">${__P(tls,false)}</boolProp>
+            <stringProp name="server">${__P(host,127.0.0.1)}</stringProp>
+            <stringProp name="port">${__P(port,18080)}</stringProp>
+            <stringProp name="path">${__P(wspath,/ws/test)}</stringProp>
+            <stringProp name="connectTimeout">${__P(connms,2000)}</stringProp>
+            <stringProp name="readTimeout">${__P(readms,6000)}</stringProp>
+          </eu.luminis.jmeter.wssampler.OpenWebSocketSampler>
+          <hashTree/>
+          <!-- subscribe=true(기본)일 때만 구독 메시지 1개 전송. 서버가 접속 즉시 push 하면 -Jsubscribe=false -->
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="If subscribe">
+            <stringProp name="IfController.condition">${__P(subscribe,true)}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler" testname="Send subscribe msg">
+              <boolProp name="createNewConnection">false</boolProp>
+              <stringProp name="dataType">Text</stringProp>
+              <boolProp name="loadDataFromFile">false</boolProp>
+              <stringProp name="requestData">${__P(submsg,hello)}</stringProp>
+            </eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler>
+            <hashTree/>
+          </hashTree>
+        </hashTree>
+        <!-- 본 루프: 서버가 밀어주는 프레임을 계속 수신. 같은 연결 재사용(createNewConnection=false). -->
+        <eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.SingleReadWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler" testname="Receive frame">
+          <boolProp name="createNewConnection">false</boolProp>
+          <stringProp name="dataType">Text</stringProp>
+          <stringProp name="readTimeout">${__P(readms,6000)}</stringProp>
+        </eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler>
+        <hashTree>
+          <!-- 수신 데이터에 기대 문자열이 있는지 검증. expect 를 비우면(기본) 항상 통과. -->
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert received data">
+            <collectionProp name="Asserion.test_strings">
+              <stringProp name="0">${__P(expect,)}</stringProp>
+            </collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+            <boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">16</intProp>
+          </ResponseAssertion>
+          <hashTree/>
+          <!-- 수신 간 대기(기본 0 = 오는 대로 계속 읽음). 서버 push 폭주 방어용으로만 씀. -->
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Read Interval">
+            <stringProp name="ConstantTimer.delay">${__P(intervalms,0)}</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
