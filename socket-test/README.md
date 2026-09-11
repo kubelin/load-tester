@@ -52,6 +52,24 @@ STALL_N=250 python3 scripts/ws_loadclient.py 300 50 180 <서버IP> 8080 /ws/test
 
 출력: 연결 성립/거절, seq 누락, hello→첫틱 지연 p50/p99, 틱 간격 p50/p99, 세션별 p99 분포, 종료코드 분포.
 
+#### 로그 저장 (env 옵션 · 기본 꺼짐)
+
+```bash
+WS_LOG=1 python3 scripts/ws_loadclient.py 2000 1000 60 <서버IP> 8080 /ws/test 15
+# → logs/ 에 실행마다 2개 생성:
+#     ws_<연결>c_<간격>ms_<시각>.log           요약 리포트
+#     ws_<연결>c_<간격>ms_<시각>.sessions.csv   세션별 상세(idx,established,rejected,ticks,max_seq,
+#                                              first_tick_ms,iv_p50/p99,close_code,error)
+
+WS_LOGDIR=/var/log/wstest WS_LOG=1 python3 scripts/ws_loadclient.py ...   # 디렉터리 지정
+```
+
+| env | 기본 | 설명 |
+|---|---|---|
+| `WS_LOG` | `0` (끔) | `1`/`true`/`on`/`yes` 면 로그 파일 저장 |
+| `WS_LOGDIR` | `logs` | 로그 디렉터리 (없으면 생성) |
+| `STALL_N` | `0` | 앞쪽 N개 연결을 느린-소비자로 (읽기 중단) |
+
 ## 테스트 요약 (2026-09-11, 발생기 2core/1.5GB 단일 박스)
 
 | 시나리오 | 결과 |
