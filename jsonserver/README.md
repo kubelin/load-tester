@@ -17,9 +17,9 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 ### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)
 
 `?delay=` 와 `?respKB=` 는 조합 가능하며, 게이트웨이가 쿼리스트링을 백엔드로 전달해야 적용된다.
-관련 부하 플랜(루트):
-- `custom-payload.jmx` — `-Jrespkb=<KB> -Jdelayms=<ms>` : **응답 바디** 팽창(서버 생성) + 지연
-- `custom-reqbody.jmx` — `-Jreqbytes=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤)
+발생기 쪽 레버 (루트 `custom.jmx`, 래퍼 `scripts/run-custom.sh` — CUSTOM-GUIDE.md 3장):
+- `RESPKB=<KB> DELAYMS=<ms>` : **응답 바디** 팽창(서버 생성) + 지연 → `?respKB=&delay=<n>ms`
+- `REQBYTES=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤 → `data.InRec1.PAD`)
 
 응답 팽창은 서버(Go)가, 요청 팽창은 발생기(JMeter)가 만든다 — 데이터를 생성하는 쪽이 다르기 때문.
 
@@ -45,11 +45,14 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
  "data":{"OutRec1":{"USER_ID":"1234","STATUS":"정상"}}}
 ```
 
-부하 플랜: 루트의 `custom-load.jmx` (uuId/시각/USER_ID 자동 생성, rspCd 0000 검증 포함).
-실행 스크립트에 `PLAN=custom-load.jmx` 를 붙이면 이 규격으로 부하를 건다:
+부하 플랜: 루트의 `custom.jmx` + 바디 템플릿 `custom-body.json` (uuId/시각/USER_ID 자동 생성,
+rspCd 0000 검증 포함). **규격을 바꾸면 custom.go와 custom-body.json을 짝으로 수정**한다.
+실행은 래퍼 한 줄 (상세: CUSTOM-GUIDE.md):
 
 ```bash
-PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
+./scripts/run-custom.sh once   <서버IP> 18080                 # 1건 보내 규격 확인
+./scripts/run-custom.sh tps    10000 <서버IP> 18080 300        # 고정 TPS
+./scripts/run-custom.sh vusers 5000 <서버IP> 18080 1000 300    # vUser
 ```
 
 ### /echo 응답 예

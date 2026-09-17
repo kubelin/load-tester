@@ -1,9 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  custom.jmx — /custom(사내 규격) 통합 부하 플랜. 요청 바디는 custom-body.json에서 읽는다.
+
+  -J 프로퍼티 (모두 선택, 괄호는 기본값):
+    host(127.0.0.1) port(18082) path(/custom)
+    threads(100) rampup(10) duration(60) loops(-1: duration까지 무한)
+    thinkms(0)   vUser 모드 think time(ms). 0이면 없음
+    tpm(0)       고정 TPS 모드: 분당 목표 샘플 수 = TPS×60. 0이면 페이싱 없음(무제한)
+    body(custom-body.json)  요청 바디 템플릿 파일 (실행 디렉터리 기준 상대경로)
+    reqbytes(0)  요청 바디 팽창(바이트, JMeter 생성) → body 템플릿의 PAD 필드
+    respkb(0)    응답 팽창(KB, 서버 생성)  → ?respKB= 쿼리
+    delayms(0)   서버 처리 지연(ms)         → ?delay=<n>ms 쿼리
+  가이드: CUSTOM-GUIDE.md
+-->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
-    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Custom Payload Probe">
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Custom Spec">
       <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
-        <collectionProp name="Arguments.arguments"/>
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="BODY_TEMPLATE" elementType="Argument">
+            <stringProp name="Argument.name">BODY_TEMPLATE</stringProp>
+            <stringProp name="Argument.value">${__FileToString(${__P(body,custom-body.json)},UTF-8,)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+            <stringProp name="Argument.desc">시작 시 1회 읽음. 매 요청은 __eval로 템플릿 안의 함수만 평가</stringProp>
+          </elementProp>
+          <elementProp name="TPM_EFF" elementType="Argument">
+            <stringProp name="Argument.name">TPM_EFF</stringProp>
+            <stringProp name="Argument.value">${__jexl3(${__P(tpm,0)} > 0 ? ${__P(tpm,0)} : 6000000000000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+            <stringProp name="Argument.desc">tpm 미지정이면 사실상 무한(=지연 0)으로 페이싱 타이머 무력화</stringProp>
+          </elementProp>
+          <elementProp name="QUERY" elementType="Argument">
+            <stringProp name="Argument.name">QUERY</stringProp>
+            <stringProp name="Argument.value">${__jexl3((${__P(respkb,0)} > 0 || ${__P(delayms,0)} > 0) ? "?respKB=${__P(respkb,0)}&amp;delay=${__P(delayms,0)}ms" : "")}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+            <stringProp name="Argument.desc">레버를 준 경우에만 쿼리스트링 부착</stringProp>
+          </elementProp>
+        </collectionProp>
       </elementProp>
     </TestPlan>
     <hashTree>
@@ -14,7 +47,8 @@
         <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller">
-          <intProp name="LoopController.loops">-1</intProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">${__P(loops,-1)}</stringProp>
         </elementProp>
       </ThreadGroup>
       <hashTree>
@@ -33,14 +67,14 @@
             <collectionProp name="Arguments.arguments">
               <elementProp name="" elementType="HTTPArgument">
                 <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                <stringProp name="Argument.value">{"header":{"mdSect":"H55","svcId":"uwa0000p","uuId":"${__UUID}","tlgrPrgsNo":"01","userIpAddr":"45.82.15.155","smpNtcTrdgSect":"1","trdgDt":"${__time(yyyyMMdd)}","pcRqstTime":"${__time(HHmmssSSS)}","clitRsrvPrt":"","testSect":"T","userId":"TD${__threadNum}","macAddr":"","langTyp":"1","scrnNo1":"12345","scrnNo2":"67890","userIpAddrTelno":"","brnhCd":"10401","upprDprtCd":"S2820","acngUnitCd":"10401","prevAfteRqstSect":"0","prevAfteDtaSect":"","dprtSectCd":"D"},"data":{"InRec1":{"USER_PSWD":"1234","USER_ID":"${__threadNum}","EMAL_ADRS":"","USER_IP":"111","MAC":"111"}}}</stringProp>
+                <stringProp name="Argument.value">${__eval(${BODY_TEMPLATE})}</stringProp>
                 <stringProp name="Argument.metadata">=</stringProp>
               </elementProp>
             </collectionProp>
           </elementProp>
           <stringProp name="HTTPSampler.domain">${__P(host,127.0.0.1)}</stringProp>
           <stringProp name="HTTPSampler.port">${__P(port,18082)}</stringProp>
-          <stringProp name="HTTPSampler.path">/custom?respKB=${__P(respkb,0)}&amp;delay=${__P(delayms,0)}</stringProp>
+          <stringProp name="HTTPSampler.path">${__P(path,/custom)}${QUERY}</stringProp>
           <stringProp name="HTTPSampler.method">POST</stringProp>
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
           <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
@@ -57,9 +91,14 @@
             <intProp name="Assertion.test_type">16</intProp>
           </ResponseAssertion>
           <hashTree/>
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time">
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time (vUser mode: -Jthinkms)">
             <stringProp name="ConstantTimer.delay">${__P(thinkms,0)}</stringProp>
           </ConstantTimer>
+          <hashTree/>
+          <ConstantThroughputTimer guiclass="TestBeanGUI" testclass="ConstantThroughputTimer" testname="Pace to target TPS (TPS mode: -Jtpm)">
+            <intProp name="calcMode">4</intProp>
+            <stringProp name="throughput">${TPM_EFF}</stringProp>
+          </ConstantThroughputTimer>
           <hashTree/>
         </hashTree>
       </hashTree>

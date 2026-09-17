@@ -37,14 +37,14 @@ case "$MODE" in
     RAMP=$(( PER / 100 )); [ "$RAMP" -lt 10 ] && RAMP=10
     echo "=== 분산 vUser | 에이전트 ${N}대(${AGENTS}) × ${PER}명 = 총 $(( N * PER ))명 | think ${THINK}ms | ${DUR}s ==="
     GPROPS=(-Ghost="$HOST" -Gport="$PORT" -Gthreads="$PER" -Grampup="$RAMP" -Gduration="$DUR" -Gthinkms="$THINK")
-    PLAN=echo-load.jmx
+    PLAN=${PLAN:-echo-load.jmx}
     ;;
   target)
     PER=${5:?에이전트당 TPS}; DUR=${6:-300}
     TPM=$(( PER * 60 )); THREADS=$(( PER / 20 )); [ "$THREADS" -lt 100 ] && THREADS=100
     echo "=== 분산 고정TPS | 에이전트 ${N}대(${AGENTS}) × ${PER} = 총 $(( N * PER )) TPS | ${DUR}s ==="
     GPROPS=(-Ghost="$HOST" -Gport="$PORT" -Gtpm="$TPM" -Gthreads="$THREADS" -Grampup=10 -Gduration="$DUR")
-    PLAN=target-tps.jmx
+    PLAN=${PLAN:-target-tps.jmx}
     ;;
   *) echo "모드는 vusers 또는 target"; exit 1 ;;
 esac
@@ -52,7 +52,7 @@ esac
 # 마스터는 부하를 만들지 않으므로 힙은 결과 수집분만. 결과는 마스터에 합산 저장된다.
 JVM_ARGS="-Xms1g -Xmx4g" jmeter -n -t "$PLAN" -R "$AGENTS" \
   -Dserver.rmi.ssl.disable=true \
-  "${GPROPS[@]}" \
+  "${GPROPS[@]}" ${EXTRA_GOPTS:-} \
   -l "results/result_$TAG.jtl" -j "results/jmeter_$TAG.log" 2>&1 | grep -E "^summary|Remote engines|Starting|Error|error"
 
 echo ""

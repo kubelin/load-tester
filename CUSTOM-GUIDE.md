@@ -1,0 +1,163 @@
+# 사내 규격(/custom) 부하테스트 가이드 — custom.jmx + custom-body.json
+
+사내 전문 규격으로 부하를 거는 데 필요한 것은 **파일 두 개**다.
+
+| 파일 | 역할 | 언제 손대나 |
+|---|---|---|
+| `custom-body.json` | 요청 바디 템플릿 (header 22필드 + data.InRec1) | **규격이 바뀔 때** — 여기만 고친다 |
+| `custom.jmx` | 통합 플랜. 바디를 위 파일에서 읽고, `-J` 프로퍼티로 모드·레버를 결정 | 거의 안 건드림 |
+| `scripts/run-custom.sh` | 위 두 파일로 once / tps / vusers / max 모드를 실행하는 래퍼 | — |
+
+서버 쪽 규격은 `jsonserver/custom.go`의 [구멍 1~3]. **바디 템플릿과 custom.go는 항상 짝으로 수정**한다
+(필드를 추가했으면 양쪽 모두).
+
+---
+
+## 1. 빠른 시작 (3단계)
+
+```bash
+# ① 규격 확인 — 1건만 보내고 실제 전송된 요청/응답을 눈으로 본다
+./scripts/run-custom.sh once <서버IP> 18080
+
+# ② 결과서용 고정 TPS — 1만 TPS를 5분 유지
+./scripts/run-custom.sh tps 10000 <서버IP> 18080 300
+
+# ③ vUser 시나리오 — 9,000명, think 1초, 5분
+./scripts/run-custom.sh vusers 9000 <서버IP> 18080 1000 300
+
+# (탐색) 최대 TPS — 스레드 단계 증가
+./scripts/run-custom.sh max <서버IP> 18080
+```
+
+`once`는 요청 바디(uuId·시각·USER_ID가 채워진 실제 값), 응답 본문, rspCd 검증 결과를 출력한다.
+바디 템플릿을 고쳤으면 **부하를 걸기 전에 반드시 once로 확인**한다 — 규격이 틀리면 수만 건의
+에러 샘플만 쌓인다.
+
+`REPORT=1`을 앞에 붙이면 종료 후 HTML 리포트를 자동 생성한다 (REPORT-GUIDE.md).
+
+---
+
+## 2. 모드가 결정되는 방식
+
+`custom.jmx` 하나에 think-time 타이머와 페이싱 타이머(Constant Throughput Timer)가 함께 들어 있고,
+**어떤 프로퍼티를 주느냐**로 모드가 정해진다. 래퍼가 알아서 넣으므로 직접 신경 쓸 일은 없지만
+원리는 알아두자.
+
+| 모드 | 래퍼 | 넘기는 핵심 프로퍼티 | 동작 |
+|---|---|---|---|
+| 고정 TPS | `tps` → `run-target-tps.sh` | `tpm=TPS×60`, `threads` | CTT가 스레드를 재워 목표 TPS 유지. think 없음 |
+| vUser | `vusers` → `run-vusers.sh` | `threads`, `thinkms` | `tpm` 미지정(0) → 페이싱 없음. think time만 적용 |
+| 최대 TPS | `max` → `run-max-tps.sh` | `threads` 단계 증가, `thinkms=0` | 둘 다 꺼짐 → 무제한 연타 |
+| 1건 확인 | `once` | `threads=1`, `loops=1` | 1건 전송 후 종료 |
+
+- `tpm=0`이면 플랜이 페이싱 타이머의 목표를 사실상 무한대로 잡아 지연이 항상 0이 된다 (타이머 무력화).
+- `thinkms=0`이면 think 타이머 지연 0 (무력화).
+- 옛 플랜 4개(custom-load / custom-target-tps / custom-payload / custom-reqbody)는 이 한 파일로 대체됐다.
+  `PLAN=custom.jmx` 로 기존 러너에 직접 꽂아도 된다: `PLAN=custom.jmx ./scripts/run-target-tps.sh 10000 <IP> 18080 300`
+
+---
+
+## 3. 레버 — 게이트웨이 한계점 탐색
+
+환경변수로 준다. 0(기본)이면 플랜은 쿼리스트링이나 PAD를 **아예 붙이지 않는다** (결과서용 요청은 순수 규격 그대로).
+
+| 환경변수 | `-J` | 효과 | 생성 주체 |
+|---|---|---|---|
+| `REQBYTES=1048576` | `reqbytes` | 요청 바디 `data.InRec1.PAD`에 N바이트 랜덤 문자열 | JMeter |
+| `RESPKB=5120` | `respkb` | `?respKB=N` → 응답을 N KB로 팽창 | 서버(custom.go) |
+| `DELAYMS=200` | `delayms` | `?delay=Nms` → 서버가 N ms sleep (in-flight 누적) | 서버(custom.go) |
+
+```bash
+# 응답 5MB + 200ms 지연을 vUser 2,000명이 think 없이 5분 — 게이트웨이 direct memory / 커넥션 누적 관찰
+RESPKB=5120 DELAYMS=200 ./scripts/run-custom.sh vusers 2000 <서버IP> 18080 0 300
+
+# 1MB 요청 바디를 500 TPS로
+REQBYTES=1048576 ./scripts/run-custom.sh tps 500 <서버IP> 18080 300
+
+# 레버가 실제로 붙었는지 1건으로 확인 (URL에 ?respKB=..&delay=..ms, PAD 채워짐)
+RESPKB=64 DELAYMS=50 REQBYTES=100 ./scripts/run-custom.sh once <서버IP> 18080
+```
+
+쿼리스트링 레버는 **게이트웨이가 쿼리를 백엔드로 그대로 전달**해야 동작한다. 응답에 `procUs`가
+지연만큼 커졌는지(`once`로 확인)로 전달 여부를 판단할 수 있다.
+
+---
+
+## 4. 규격 수정하기 — custom-body.json
+
+템플릿은 JSON이지만 값 자리에 JMeter 함수를 쓸 수 있다. 시작 시 파일을 **한 번만** 읽어 변수에
+담고, 매 요청마다 함수 부분만 평가한다 (파일 I/O는 매 요청 없음).
+
+| 자리 | 함수 | 의미 |
+|---|---|---|
+| `uuId` | `${__UUID}` | 요청마다 새 UUID |
+| `trdgDt` / `pcRqstTime` | `${__time(yyyyMMdd)}` / `${__time(HHmmssSSS)}` | 발생기 현재 시각 |
+| `userId` / `USER_ID` | `TD${__threadNum}` / `${__threadNum}` | 스레드 번호 (1..threads) — vUser별 고유 ID |
+| `PAD` | `${__RandomString(${__P(reqbytes,0)},...)}` | 요청 팽창 레버. 기본 빈 문자열 |
+
+수정 규칙:
+1. **고정값은 그냥 바꾸면 된다** (`"brnhCd": "10401"` → 다른 코드).
+2. **필드 추가/삭제**는 `jsonserver/custom.go` [구멍 1]의 구조체도 같이 고치고 재빌드 (GO-GUIDE.md).
+   Go는 모르는 필드를 무시하므로 서버를 안 고쳐도 에러는 안 나지만, 응답 header 에코에 그 필드가 빠진다.
+3. 값을 요청마다 달리하려면 JMeter 함수를 쓴다. 자주 쓰는 것:
+   `${__Random(1,1000)}`, `${__RandomString(8,ABCDEFG0123456789)}`, `${__counter(FALSE,)}`(스레드별 1,2,3…),
+   `${__time(yyyy-MM-dd'T'HH:mm:ss)}`. 함수 안에 콤마가 필요하면 `\,`로 이스케이프.
+4. 계좌번호·고객ID처럼 **실제 데이터 목록**이 필요하면 CSV Data Set을 붙이는 것이 정석이다
+   (플랜에 `CSVDataSet` 추가 → 템플릿에서 `${ACNT_NO}` 참조). 필요하면 별도로 구성한다.
+5. 규격이 엄격해 **모르는 필드를 거부하는 대상**이라면 `PAD` 줄을 지운다 (그러면 `REQBYTES` 레버는 비활성).
+6. 고친 뒤 **`once`로 확인** → rspCd 0000, 응답 header에 값이 그대로 에코되는지.
+
+다른 규격 파일을 쓰려면 `BODY=path/to/other.json`. 서비스별 템플릿을 여러 개 두고 골라 쓰면 된다:
+```bash
+BODY=bodies/uwa0001p.json ./scripts/run-custom.sh tps 3000 <서버IP> 18080 300
+```
+
+---
+
+## 5. 판정 기준 (결과서)
+
+| 항목 | 기준 |
+|---|---|
+| 처리량 | `summary +` 정상상태 구간이 목표 TPS ±5% (고정 TPS 모드) |
+| 에러 | `Err: 0 (0.00%)`. 어설션이 응답에 `"rspCd":"0000"` 없으면 에러로 집계 |
+| 응답시간 | p99가 SLA 이내, 시간이 지나도 우상향하지 않음 (누적 징후) |
+| 서버 | access log `proc_us`가 안정. 발생기 RT − proc_us = 네트워크/게이트웨이 구간 |
+
+목표 TPS를 못 채우는데 에러가 없으면 스레드 부족이다 → `EXTRA_JOPTS="-Jthreads=1000"`
+(계산은 TESTING.md 1장, FORMULAS.md).
+
+---
+
+## 6. 알아둘 점
+
+**발생기 오버헤드.** 바디를 매 요청 템플릿에서 평가(`__eval`)하고 페이싱 타이머가 항상 트리에 있어,
+옛 인라인 플랜 대비 **단일 스레드 무제한 처리량이 약 30% 낮다** (검증 환경: 3,900/s → 2,700/s,
+`__eval` 약 20%, 타이머 약 15%). 이는 발생기 CPU 비용이지 대상 서버 측정값이 아니다.
+- 고정 TPS 1만 모드에서는 요청당 수십 µs = 코어 0.5개 수준이라 무시해도 된다.
+- `max` 모드로 **발생기 한 대의 한계**를 재는 경우에는 `echo-load.jmx`(/echo)로 재는 것이 정확하다
+  (TESTING.md 2장). custom 경로의 최대 TPS는 규격 검증용 참고치로 본다.
+- 정말 custom 경로에서 발생기 한계까지 짜내야 하면 에이전트를 늘리는 것(run-agents.sh)이 정답이다.
+
+**분산(agent) 실행.** `PLAN=custom.jmx ./scripts/run-agents.sh ...` 로 쓴다. 바디 파일은 **에이전트 머신마다**
+있어야 한다 — 마스터가 보내는 것은 jmx뿐이고, `custom-body.json`은 각 에이전트가 자기 실행 디렉터리
+(start-agent.sh가 cd 하는 레포 루트)에서 읽는다. 레포를 그대로 배포했다면 이미 있다.
+레버는 `EXTRA_GOPTS="-Grespkb=5120 -Gdelayms=200"` 로 넘긴다.
+
+**바디 파일 경로.** `custom.jmx`를 직접 `jmeter -n -t custom.jmx`로 돌리면 `custom-body.json`은 **jmeter를
+실행한 디렉터리** 기준이다 (레포 루트에서 실행하거나 `-Jbody=/절대경로`). 래퍼는 절대경로로 바꿔 넘기므로
+어디서 실행해도 된다.
+
+**포트 기본값.** 플랜/러너의 기본 포트는 18082, 배포 문서의 서버 포트는 18080이다. 항상 인자로 명시할 것.
+
+---
+
+## 7. 트러블슈팅
+
+| 증상 | 원인 → 조치 |
+|---|---|
+| once에서 "샘플이 기록되지 않았습니다" | 바디 파일 경로 오류 또는 함수 문법 오류. `results/jmeter_once_*.log` 확인 |
+| 응답 `rspCd 9999 INVALID_JSON` | 템플릿이 JSON으로 깨짐 (콤마·따옴표). once 출력의 요청 본문을 JSON 검사기에 넣어본다 |
+| Err 100%, 응답 200 | 어설션 실패 — 응답에 `"rspCd":"0000"`이 없다. 실제 대상의 정상 코드가 다르면 `custom.jmx`의 `Assert rspCd 0000` 문자열 수정 |
+| 레버를 줬는데 procUs가 안 늘어남 | 게이트웨이가 쿼리스트링을 버림. 대상 서버에 직접 once로 비교 |
+| 요청 팽창 시 413/400 | 서버 `customMaxBody`(64MB) 또는 게이트웨이 바디 한도 초과 |
+| 목표 TPS 미달, Err 0 | 스레드 부족 → `EXTRA_JOPTS="-Jthreads=N"` (N ≥ TPS × RT초 × 2) |

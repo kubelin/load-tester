@@ -1,0 +1,36 @@
+{
+  "header": {
+    "mdSect": "H55",
+    "svcId": "uwa0000p",
+    "uuId": "${__UUID}",
+    "tlgrPrgsNo": "01",
+    "userIpAddr": "45.82.15.155",
+    "smpNtcTrdgSect": "1",
+    "trdgDt": "${__time(yyyyMMdd)}",
+    "pcRqstTime": "${__time(HHmmssSSS)}",
+    "clitRsrvPrt": "",
+    "testSect": "T",
+    "userId": "TD${__threadNum}",
+    "macAddr": "",
+    "langTyp": "1",
+    "scrnNo1": "12345",
+    "scrnNo2": "67890",
+    "userIpAddrTelno": "",
+    "brnhCd": "10401",
+    "upprDprtCd": "S2820",
+    "acngUnitCd": "10401",
+    "prevAfteRqstSect": "0",
+    "prevAfteDtaSect": "",
+    "dprtSectCd": "D"
+  },
+  "data": {
+    "InRec1": {
+      "USER_PSWD": "1234",
+      "USER_ID": "${__threadNum}",
+      "EMAL_ADRS": "",
+      "USER_IP": "111",
+      "MAC": "111",
+      "PAD": "${__RandomString(${__P(reqbytes,0)},abcdefghijklmnopqrstuvwxyz0123456789)}"
+    }
+  }
+}

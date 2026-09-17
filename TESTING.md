@@ -15,18 +15,26 @@ dummy-json 서버(또는 실제 대상)에 대해 목적별로 테스트를 실�
 
 | | `/echo` (단순 에코 — 인프라 측정용) | `/custom` (사내 규격 — 결과서용) |
 |---|---|---|
-| **폐쇄 루프** (vusers/max/multi/calibration) | `echo-load.jmx` (기본값) | `PLAN=custom-load.jmx` |
-| **고정 TPS** (run-target-tps) | `target-tps.jmx` (기본값) | `PLAN=custom-target-tps.jmx` |
+| **폐쇄 루프** (vusers/max/multi/calibration) | `echo-load.jmx` (기본값) | `PLAN=custom.jmx` |
+| **고정 TPS** (run-target-tps) | `target-tps.jmx` (기본값) | `PLAN=custom.jmx` |
 
-주의: 고정 TPS 모드에 `custom-load.jmx`를 쓰면 안 된다 — 페이싱 타이머가 없어 목표
-TPS 제어가 되지 않는다. 반대로 `custom-target-tps.jmx`를 vUser 모드에 쓰면 think time
-대신 타이머가 개입해 의도와 달라진다. **표의 짝 그대로 쓸 것.**
+`custom.jmx`는 두 모델을 모두 지원한다 — 러너가 `tpm`을 넘기면 고정 TPS, `thinkms`를 넘기면 vUser로
+동작한다 (원리는 CUSTOM-GUIDE.md 2장). 요청 바디는 `custom-body.json`에서 읽는다.
+사내 규격 테스트는 래퍼 `scripts/run-custom.sh`를 쓰는 것이 가장 간단하다:
+
+```bash
+./scripts/run-custom.sh once   <서버IP> 18080            # 1건 보내 규격 확인
+./scripts/run-custom.sh tps    10000 <서버IP> 18080 300   # 사내 규격으로 1만 TPS 유지 검증
+./scripts/run-custom.sh vusers 9000 <서버IP> 18080 1000 300
+```
+
+기존 러너에 직접 꽂아도 된다:
 
 ```bash
 # 예: 사내 규격으로 1만 TPS 유지 검증
-PLAN=custom-target-tps.jmx ./scripts/run-target-tps.sh 10000 <서버IP> 18080 300
+PLAN=custom.jmx ./scripts/run-target-tps.sh 10000 <서버IP> 18080 300
 # 예: 사내 규격으로 vUser 9,000명
-PLAN=custom-load.jmx ./scripts/run-vusers.sh 9000 <서버IP> 18080 1000 300
+PLAN=custom.jmx ./scripts/run-vusers.sh 9000 <서버IP> 18080 1000 300
 ```
 
 ---
