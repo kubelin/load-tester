@@ -90,8 +90,9 @@ unzip apache-jmeter-5.6.3.zip -d ~
 export PATH=~/apache-jmeter-5.6.3/bin:$PATH
 jmeter --version                     # 5.6.3 확인
 
-# 3-3. PATH 영구화
+# 3-3. PATH 영구화 + HTML 리포트 설정(5초 버킷, APDEX 50/200ms — CUSTOM-GUIDE.md 5장)
 echo 'export PATH=$HOME/jdk-17*/bin:$HOME/apache-jmeter-5.6.3/bin:$PATH' >> ~/.bashrc
+cat load-tester/jmeter-user.properties >> ~/apache-jmeter-5.6.3/bin/user.properties
 
 # 3-4. 발생기 → 서버 통신 확인
 curl -s http://<서버VM IP>:18080/health   # → OK (안 되면 방화벽부터 확인)

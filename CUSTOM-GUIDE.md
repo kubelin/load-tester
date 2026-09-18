@@ -114,7 +114,36 @@ BODY=bodies/uwa0001p.json ./scripts/run-custom.sh tps 3000 <서버IP> 18080 300
 
 ---
 
-## 5. 판정 기준 (결과서)
+## 5. 출력 — HTML 리포트와 결과서 숫자
+
+| 출력 | 만드는 법 | 위치 |
+|---|---|---|
+| HTML 리포트 (그래프 증적) | 실행 앞에 `REPORT=1` | `results/report_<태그>/index.html` (폴더째 복사해 브라우저로) |
+| 결과서 숫자 (TPS·에러율·p50/p90/p95/p99/max) | `./scripts/summarize-jtl.sh <jtl> <램프업초>` | 터미널 출력 |
+| 1건 요청/응답 전문 | `once` 모드 | `results/once_<시각>.xml` |
+
+```bash
+REPORT=1 ./scripts/run-custom.sh tps 10000 <서버IP> 18080 300          # 리포트 자동 생성
+./scripts/summarize-jtl.sh results/result_target10000_<시각>.jtl 30      # 앞 30초(램프업) 제외
+JVM_ARGS=-Xmx6g jmeter -g results/result_target10000_<시각>.jtl -o results/report_target10000/   # 나중에 따로
+```
+
+`max` 모드는 단계별 부하 조건이 다르므로 단계마다 리포트를 하나씩 만든다 (병합하지 않음).
+
+**리포트 설정 (발생기 VM에서 1회).** JMeter 대시보드 기본값은 그래프가 1분 버킷이고 APDEX 기준이
+500ms/1500ms라 금융 시스템 기준으로 거칠다. 루트의 `jmeter-user.properties`를 이어붙이면 5초 버킷,
+APDEX 50ms/200ms로 바뀐다:
+
+```bash
+cat jmeter-user.properties >> ~/apache-jmeter-5.6.3/bin/user.properties
+```
+
+결과서에 캡처할 화면은 Statistics 표(p99 포함), Transactions Per Second(목표선 유지 여부),
+Response Times Over Time(우상향 여부) 세 가지. 상세는 REPORT-GUIDE.md 4장과 `jmeter-report-guide.html`.
+
+---
+
+## 6. 판정 기준 (결과서)
 
 | 항목 | 기준 |
 |---|---|
@@ -128,7 +157,7 @@ BODY=bodies/uwa0001p.json ./scripts/run-custom.sh tps 3000 <서버IP> 18080 300
 
 ---
 
-## 6. 알아둘 점
+## 7. 알아둘 점
 
 **발생기 오버헤드.** 바디를 매 요청 템플릿에서 평가(`__eval`)하고 페이싱 타이머가 항상 트리에 있어,
 옛 인라인 플랜 대비 **단일 스레드 무제한 처리량이 약 30% 낮다** (검증 환경: 3,900/s → 2,700/s,
@@ -151,7 +180,7 @@ BODY=bodies/uwa0001p.json ./scripts/run-custom.sh tps 3000 <서버IP> 18080 300
 
 ---
 
-## 7. 트러블슈팅
+## 8. 트러블슈팅
 
 | 증상 | 원인 → 조치 |
 |---|---|
