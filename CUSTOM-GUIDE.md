@@ -65,7 +65,7 @@
 | 환경변수 | `-J` | 효과 | 생성 주체 |
 |---|---|---|---|
 | `REQBYTES=1048576` | `reqbytes` | 요청 최상위 `_pad` 필드에 N바이트 랜덤 문자열 (header/data는 그대로) | JMeter |
-| `RESPKB=5120` | `respkb` | `?respKB=N` → 응답을 N KB로 팽창 | 서버(custom.go) |
+| `RESPKB=5120` | `respkb` | `?respKB=N` → 응답을 N KB로 팽창 (`data._pad`). 래퍼가 발생기 응답 저장을 16KB로 자동 제한해 힙을 보호 (수신 바이트·응답시간은 전량 측정) | 서버(custom.go) |
 | `DELAYMS=200` | `delayms` | `?delay=Nms` → 서버가 N ms sleep (in-flight 누적) | 서버(custom.go) |
 | `FAIL=0.01` | `fail` | `?fail=p` → 요청의 p 비율을 `rtrnCd 999` 응답으로 (HTTP는 200). 어설션·에러율 집계 동작 확인용 | 서버(custom.go) |
 
@@ -81,6 +81,17 @@ RESPKB=64 DELAYMS=50 REQBYTES=100 ./scripts/run-custom.sh once <서버IP> 18080
 
 # 실패 주입 1%로 5분 — 리포트의 에러율이 약 1%로 집계되고 Errors 표에 Assertion failed로 찍히는지 확인
 FAIL=0.01 ./scripts/run-custom.sh tps 1000 <서버IP> 18080 300
+```
+
+**대용량 응답 테스트 설계.** `RESPKB`는 vUser 수천 명·think 0과 조합하면 안 된다 — 512KB × 5,000명 무휴식은
+초당 2.5GB를 요구해 링크(1Gbps ≈ 110MB/s)와 발생기 힙이 먼저 죽는다(실측: 평균 2.8초, GC 정지). 이 레버의 목적은
+"게이트웨이에 동시에 물려 있는 큰 응답 수"이므로 **고정 TPS를 대역폭의 절반 이하로 잡고 `DELAYMS`로 in-flight를
+만든다**: in-flight ≈ TPS × 지연(초).
+
+```bash
+# 1Gbps 링크: 50MB/s ÷ 512KB ≈ 100 TPS. 지연 500ms → 동시 in-flight ≈ 50건(25MB)이 게이트웨이에 물림
+REPORT=1 RESPKB=512 DELAYMS=500 ./scripts/run-custom.sh tps 100 <서버IP> 18080 120
+cat /sys/class/net/$(ip route | awk '/default/{print $5; exit}')/speed     # 링크 속도(Mbps) 확인
 ```
 
 쿼리스트링 레버는 **게이트웨이가 쿼리를 백엔드로 그대로 전달**해야 동작한다. 응답에 `procUs`가

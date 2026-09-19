@@ -12,7 +12,7 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 | `POST /custom` | **사내 전문 규격** — header 그대로 에코 + `rtrnCd`/`rsltMsg`, data는 요청과 같은 구조에 랜덤 값. HTTP 항상 200 |
 | `POST /custom?fail=0.01` | 요청의 1%를 실패 응답(`rtrnCd 999`)으로 — 발생기 어설션/에러율 집계 확인용 |
 | `POST /custom?delay=200ms` | 백엔드 처리 지연 시뮬레이션 (in-flight 유지 → 커넥션/버퍼 누적 정찰) |
-| `POST /custom?respKB=5120` | 응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박) |
+| `POST /custom?respKB=5120` | 응답을 N KB로 팽창 — `data._pad` (게이트웨이가 큰 응답 버퍼링 → direct memory 압박) |
 | `GET /health` | 헬스체크 (`OK`) |
 
 ### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)

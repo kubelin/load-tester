@@ -157,7 +157,7 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	// 부하 정찰 레버 (쿼리 파라미터, 게이트웨이가 백엔드로 전달해야 함):
 	//   ?fail=0.01    요청의 1%를 실패 응답(rtrnCd 999, HTTP 200)으로 → 어설션/에러 집계 동작 확인
 	//   ?delay=200ms  서버 처리 지연 (in-flight 유지 → 커넥션/버퍼 누적)
-	//   ?respKB=5120  응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박)
+	//   ?respKB=5120  응답을 N KB로 팽창 — data._pad (게이트웨이가 큰 응답 버퍼링 → direct memory 압박)
 	if f := q.Get("fail"); f != "" {
 		if p, perr := strconv.ParseFloat(f, 64); perr == nil && p > 0 && rand.Float64() < p {
 			res.Header[rtrnCdKey] = rtrnFail
@@ -171,7 +171,9 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if s := q.Get("respKB"); s != "" {
 		if kb, perr := strconv.Atoi(s); perr == nil && kb > 0 && kb <= 65536 {
-			res.Header["_pad"] = strings.Repeat("x", kb*1024)
+			// data 쪽에 붙인다: header(rtrnCd 포함)가 항상 응답 앞부분에 오므로 발생기가
+			// 응답 저장을 앞 N바이트로 제한해도(httpsampler.max_bytes_to_store_per_request) 어설션이 깨지지 않는다
+			res.Data["_pad"] = strings.Repeat("x", kb*1024)
 		}
 	}
 

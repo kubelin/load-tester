@@ -13,3 +13,6 @@ jsonserver/dummy-json-darwin
 
 # java build output
 server/*.class
+
+# JVM heap dumps from OOM runs
+*.hprof

@@ -45,6 +45,12 @@ REQBYTES=${REQBYTES:-0}; RESPKB=${RESPKB:-0}; DELAYMS=${DELAYMS:-0}; FAIL=${FAIL
 export PLAN=custom.jmx
 export EXTRA_JOPTS="-Jbody=$BODY -Jreqbytes=$REQBYTES -Jrespkb=$RESPKB -Jdelayms=$DELAYMS -Jfail=$FAIL ${EXTRA_JOPTS:-}"
 
+# 응답 팽창 시 발생기 힙 보호: 응답 본문을 앞 16KB만 저장하고 나머지는 읽고 버린다 (수신 바이트·응답시간은 그대로 측정).
+# 서버가 패딩을 응답 끝(data._pad)에 붙이므로 header의 rtrnCd 어설션은 영향 없음. 직접 지정하면 그 값을 쓴다.
+if [ "$RESPKB" != "0" ] && [[ "$EXTRA_JOPTS" != *max_bytes_to_store_per_request* ]]; then
+  export EXTRA_JOPTS="$EXTRA_JOPTS -Jhttpsampler.max_bytes_to_store_per_request=16384"
+fi
+
 LEVERS=""
 [ "$REQBYTES" != "0" ] && LEVERS+=" 요청팽창=${REQBYTES}B"
 [ "$RESPKB"   != "0" ] && LEVERS+=" 응답팽창=${RESPKB}KB"
