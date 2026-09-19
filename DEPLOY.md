@@ -128,6 +128,16 @@ curl -s http://<서버VM IP>:18080/health   # → OK (안 되면 방화벽부터
 ./scripts/run-vusers.sh 5000 <서버VM IP> 18080 1000 300
 ```
 
+사내 규격(/custom)으로 결과서를 만들 때는 위 대신 래퍼를 쓴다 — 순서와 통과 기준은 TESTING.md 0장:
+
+```bash
+./scripts/run-custom.sh once <서버VM IP> 18080                         # 규격 확인 (rtrnCd 000)
+FAIL=0.01 ./scripts/run-custom.sh tps 1000 <서버VM IP> 18080 60         # 에러 집계 검증 (Err ≈ 1%)
+REPORT=1 ./scripts/run-custom.sh tps 10000 <서버VM IP> 18080 300        # 1만 TPS 유지
+REPORT=1 ./scripts/run-custom.sh max <서버VM IP> 18080                  # 최대 TPS
+REPORT=1 ./scripts/run-custom.sh vusers 5000 <서버VM IP> 18080 1000 300 # vUser
+```
+
 판정 기준·스레드 산정은 TESTING.md와 FORMULAS.md 참고.
 발생기 1대 한계를 넘는 목표면 TESTING.md 3장(agent 분산 모드)으로.
 
