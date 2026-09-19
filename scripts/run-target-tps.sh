@@ -14,7 +14,13 @@ TPM=$(( TPS * 60 ))                          # CTT 단위는 분당 샘플 수
 THREADS=$(( TPS / 20 )); [ "$THREADS" -lt 100 ] && THREADS=100   # 스레드 ≥ TPS×RT + 여유
 RAMP=$(( THREADS / 100 )); [ "$RAMP" -lt 5 ] && RAMP=5
 
-ulimit -n 65536
+# 파일 디스크립터 한도 — 하드 한도까지만 올리고, 낮으면 경고 후 계속 (하드 한도 상향은 TUNING.md 6-2 요청)
+ulimit -n 65536 2>/dev/null || ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
+NOFILE=$(ulimit -n)
+if [ "$NOFILE" != "unlimited" ] && [ "$NOFILE" -lt 65536 ]; then
+  echo "경고: open files 한도가 $NOFILE 입니다 (권장 65536). 스레드 수가 이 값에 가까우면 'Too many open files'로 실패합니다."
+  echo "      영구 상향: /etc/security/limits.d/90-loadtest.conf (TUNING.md 6-2) 적용 후 재로그인"
+fi
 
 # Java 버전 가드 — JMeter 5.6.3은 Java 8 이상 (8u432·21 실측). 1.8인데 NoClassDefFoundError가 나면
 # headless JRE일 가능성이 크니 전체 JDK 8을 쓴다 (DEPLOY.md 3장). FORCE_JAVA=1 로 가드 무시.

@@ -7,7 +7,13 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-ulimit -n 65536
+# 파일 디스크립터 한도 — 하드 한도까지만 올리고, 낮으면 경고 후 계속 (하드 한도 상향은 TUNING.md 6-2 요청)
+ulimit -n 65536 2>/dev/null || ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
+NOFILE=$(ulimit -n)
+if [ "$NOFILE" != "unlimited" ] && [ "$NOFILE" -lt 65536 ]; then
+  echo "경고: open files 한도가 $NOFILE 입니다 (권장 65536). 스레드 수가 이 값에 가까우면 'Too many open files'로 실패합니다."
+  echo "      영구 상향: /etc/security/limits.d/90-loadtest.conf (TUNING.md 6-2) 적용 후 재로그인"
+fi
 echo "ulimit -n: $(ulimit -n)"
 
 mkdir -p results
