@@ -28,6 +28,12 @@ MODE=${1:-}
 [ -n "$MODE" ] || { sed -n '2,20p' "$0"; exit 1; }
 shift
 
+# --- 필수 파일 확인 (발생기에 레포를 통째로 옮기지 않았을 때 빠지기 쉬운 것들)
+for f in custom.jmx scripts/run-target-tps.sh scripts/run-vusers.sh scripts/run-max-tps.sh; do
+  [ -f "$f" ] || { echo "오류: $f 가 없습니다. 레포 루트($(pwd))에 custom.jmx 와 scripts/ 전체가 있어야 합니다."; exit 1; }
+done
+command -v jmeter >/dev/null || { echo "오류: jmeter 명령을 찾을 수 없습니다. PATH에 apache-jmeter-5.6.3/bin 을 추가하세요 (DEPLOY.md 3장)."; exit 1; }
+
 # --- 바디 템플릿: 원래 실행 위치 기준 → 없으면 레포 루트 기준 → 절대경로로 고정 (JMeter cwd 무관)
 BODY=${BODY:-custom-body.json}
 if   [ -f "$ORIG_PWD/$BODY" ]; then BODY=$(readlink -f "$ORIG_PWD/$BODY")
@@ -85,7 +91,11 @@ JVM_ARGS="-Xms256m -Xmx1g" jmeter -n -t custom.jmx \
   -l "$OUT" -j "results/jmeter_$TAG.log" >/dev/null 2>&1 || true
 
 if ! grep -q "<httpSample" "$OUT" 2>/dev/null; then
-  echo "오류: 샘플이 기록되지 않았습니다. results/jmeter_$TAG.log 확인 (바디 파일 경로, 함수 문법 등)"
+  echo "오류: 샘플이 기록되지 않았습니다. JMeter 로그 마지막 부분 (results/jmeter_$TAG.log):"
+  echo "----------------------------------------------------------------"
+  grep -E "ERROR|Exception|Could not|Cannot|Error" "results/jmeter_$TAG.log" 2>/dev/null | tail -n 10 || tail -n 15 "results/jmeter_$TAG.log" 2>/dev/null
+  echo "----------------------------------------------------------------"
+  echo "흔한 원인: custom.jmx 없음 / 바디 파일 경로 / 템플릿 함수 문법 / Java 17 미만 / 서버 주소·포트 오타"
   exit 1
 fi
 
