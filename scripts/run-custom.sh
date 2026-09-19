@@ -9,9 +9,10 @@
 #
 # 레버 (환경변수, 모두 선택):
 #   BODY=custom-body.json   요청 바디 템플릿 파일
-#   REQBYTES=0              요청 바디 팽창 바이트 (JMeter가 PAD 필드에 랜덤 문자열 생성)
+#   REQBYTES=0              요청 바디 팽창 바이트 (JMeter가 최상위 _pad 필드에 랜덤 문자열 생성)
 #   RESPKB=0                응답 팽창 KB          (서버가 ?respKB= 로 생성)
 #   DELAYMS=0               서버 처리 지연 ms     (서버가 ?delay= 로 sleep)
+#   FAIL=0                  실패 주입 비율 0~1    (서버가 ?fail= 비율만큼 rtrnCd 999 응답, HTTP 200)
 #   REPORT=1                종료 후 HTML 리포트 자동 생성
 #   EXTRA_JOPTS="-J..."     그 밖의 JMeter 프로퍼티 추가 전달
 #
@@ -33,15 +34,16 @@ if   [ -f "$ORIG_PWD/$BODY" ]; then BODY=$(readlink -f "$ORIG_PWD/$BODY")
 elif [ -f "$BODY" ];           then BODY=$(readlink -f "$BODY")
 else echo "오류: 바디 템플릿 파일이 없습니다: $BODY"; exit 1; fi
 
-# --- 레버 → -J 프로퍼티. 0이면 플랜이 쿼리스트링/PAD를 붙이지 않는다 (custom.jmx 주석 참고)
-REQBYTES=${REQBYTES:-0}; RESPKB=${RESPKB:-0}; DELAYMS=${DELAYMS:-0}
+# --- 레버 → -J 프로퍼티. 0이면 플랜이 쿼리스트링을 붙이지 않고 _pad는 빈 문자열이다 (custom.jmx 주석 참고)
+REQBYTES=${REQBYTES:-0}; RESPKB=${RESPKB:-0}; DELAYMS=${DELAYMS:-0}; FAIL=${FAIL:-0}
 export PLAN=custom.jmx
-export EXTRA_JOPTS="-Jbody=$BODY -Jreqbytes=$REQBYTES -Jrespkb=$RESPKB -Jdelayms=$DELAYMS ${EXTRA_JOPTS:-}"
+export EXTRA_JOPTS="-Jbody=$BODY -Jreqbytes=$REQBYTES -Jrespkb=$RESPKB -Jdelayms=$DELAYMS -Jfail=$FAIL ${EXTRA_JOPTS:-}"
 
 LEVERS=""
 [ "$REQBYTES" != "0" ] && LEVERS+=" 요청팽창=${REQBYTES}B"
 [ "$RESPKB"   != "0" ] && LEVERS+=" 응답팽창=${RESPKB}KB"
 [ "$DELAYMS"  != "0" ] && LEVERS+=" 서버지연=${DELAYMS}ms"
+[ "$FAIL"     != "0" ] && LEVERS+=" 실패주입=${FAIL}"
 echo "[custom] body=$BODY${LEVERS:+ | 레버:$LEVERS}"
 
 case "$MODE" in
@@ -54,7 +56,7 @@ esac
 
 # ============================================================================
 # once — 스레드 1개가 딱 1건 보내고, 실제 전송된 요청 바디와 응답을 그대로 보여준다.
-#        custom-body.json 수정 후 규격이 맞는지, 서버가 rspCd 0000을 주는지 확인하는 용도.
+#        custom-body.json 수정 후 규격이 맞는지, 서버가 rtrnCd 000을 주는지 확인하는 용도.
 # ============================================================================
 HOST=${1:-127.0.0.1}
 PORT=${2:-18082}
@@ -98,7 +100,7 @@ tag requestHeader | grep -oE "Content-Length: [0-9]+" || true
 tag queryString
 echo ""
 ASSERT=$(grep -A2 "<assertionResult>" "$OUT" | grep -q "<failure>true" && echo "실패" || echo "통과")
-echo "--- 응답: HTTP $(attr rc) $(attr rm) | $(attr t)ms | $(attr by) bytes | rspCd 검증: $ASSERT"
+echo "--- 응답: HTTP $(attr rc) $(attr rm) | $(attr t)ms | $(attr by) bytes | rtrnCd 검증: $ASSERT"
 tag responseData | head -c 4000
 echo ""
 echo ""

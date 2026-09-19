@@ -65,12 +65,12 @@ sudo systemctl daemon-reload && sudo systemctl enable --now dummy-json
 
 # 2-2. 동작 확인 (서버 VM 자신에서)
 curl -s http://127.0.0.1:18080/health          # → OK
-curl -s -X POST http://127.0.0.1:18080/custom -d '{"data":{"InRec1":{"USER_ID":"77"}}}'
-#   → rspCd/OutRec1 포함 응답이면 최신 바이너리 (없으면 구버전 — git pull 확인)
+curl -s -X POST http://127.0.0.1:18080/custom -d '{"header":{"svcId":"X"},"data":{"inRec1":{"useYn":"Y"}}}'
+#   → "rtrnCd":"000" 과 outRec1 포함 응답이면 최신 바이너리 (rspCd가 나오면 구버전 — git pull 확인)
 ```
 
-JSON 규격 수정이 필요해지면: `jsonserver/custom.go`의 [구멍 1~3] 수정 → 재빌드, 발생기 쪽은
-`custom-body.json`을 같이 수정 (CUSTOM-GUIDE.md 4장)
+JSON 규격(필드)이 바뀌면 발생기 쪽 `custom-body.json`만 수정 (CUSTOM-GUIDE.md 4장). 서버는 header 에코·data 랜덤이라
+그대로 동작한다. 서버 로직이 필요할 때만 `jsonserver/custom.go` [구멍 1~3] 수정 → 재빌드
 (GO-GUIDE.md 0장, 폐쇄망 내 빌드는 offline/README.md) → `./server.sh stop && start`.
 부득이 /opt 등에 사본을 두는 정책이면 **pull 할 때마다 바이너리 재복사**를 세트로.
 

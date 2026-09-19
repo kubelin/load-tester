@@ -8,9 +8,10 @@
     thinkms(0)   vUser 모드 think time(ms). 0이면 없음
     tpm(0)       고정 TPS 모드: 분당 목표 샘플 수 = TPS×60. 0이면 페이싱 없음(무제한)
     body(custom-body.json)  요청 바디 템플릿 파일 (실행 디렉터리 기준 상대경로)
-    reqbytes(0)  요청 바디 팽창(바이트, JMeter 생성) → body 템플릿의 PAD 필드
+    reqbytes(0)  요청 바디 팽창(바이트, JMeter 생성) → body 템플릿 최상위 _pad 필드
     respkb(0)    응답 팽창(KB, 서버 생성)  → ?respKB= 쿼리
     delayms(0)   서버 처리 지연(ms)         → ?delay=<n>ms 쿼리
+    fail(0)      실패 주입 비율(0~1)       → ?fail= 쿼리. 서버가 그 비율만큼 rtrnCd 999 응답
   가이드: CUSTOM-GUIDE.md
 -->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
@@ -32,7 +33,7 @@
           </elementProp>
           <elementProp name="QUERY" elementType="Argument">
             <stringProp name="Argument.name">QUERY</stringProp>
-            <stringProp name="Argument.value">${__jexl3((${__P(respkb,0)} > 0 || ${__P(delayms,0)} > 0) ? "?respKB=${__P(respkb,0)}&amp;delay=${__P(delayms,0)}ms" : "")}</stringProp>
+            <stringProp name="Argument.value">${__jexl3((${__P(respkb,0)} > 0 || ${__P(delayms,0)} > 0 || ${__P(fail,0)} > 0) ? "?respKB=${__P(respkb,0)}&amp;delay=${__P(delayms,0)}ms&amp;fail=${__P(fail,0)}" : "")}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
             <stringProp name="Argument.desc">레버를 준 경우에만 쿼리스트링 부착</stringProp>
           </elementProp>
@@ -81,14 +82,14 @@
           <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
-          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert rspCd 0000">
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert rtrnCd starts with 000">
             <collectionProp name="Asserion.test_strings">
-              <stringProp name="0">"rspCd":"0000"</stringProp>
+              <stringProp name="0">"rtrnCd"\s*:\s*"000</stringProp>
             </collectionProp>
             <stringProp name="Assertion.custom_message"></stringProp>
             <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
             <boolProp name="Assertion.assume_success">false</boolProp>
-            <intProp name="Assertion.test_type">16</intProp>
+            <intProp name="Assertion.test_type">2</intProp>
           </ResponseAssertion>
           <hashTree/>
           <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time (vUser mode: -Jthinkms)">

@@ -9,7 +9,8 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 |---|---|
 | `POST /echo` | JSON 바디를 받아 시각 스탬프와 함께 에코 |
 | `POST /echo?delay=50ms` | 처리 지연 시뮬레이션 (Go duration 형식, 최대 30s) |
-| `POST /custom` | **커스텀 header/body 규격** — `custom.go`의 수정 구역([구멍 1~3])에서 규격·로직을 직접 정의 |
+| `POST /custom` | **사내 전문 규격** — header 그대로 에코 + `rtrnCd`/`rsltMsg`, data는 요청과 같은 구조에 랜덤 값. HTTP 항상 200 |
+| `POST /custom?fail=0.01` | 요청의 1%를 실패 응답(`rtrnCd 999`)으로 — 발생기 어설션/에러율 집계 확인용 |
 | `POST /custom?delay=200ms` | 백엔드 처리 지연 시뮬레이션 (in-flight 유지 → 커넥션/버퍼 누적 정찰) |
 | `POST /custom?respKB=5120` | 응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박) |
 | `GET /health` | 헬스체크 (`OK`) |
@@ -19,34 +20,38 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 `?delay=` 와 `?respKB=` 는 조합 가능하며, 게이트웨이가 쿼리스트링을 백엔드로 전달해야 적용된다.
 발생기 쪽 레버 (루트 `custom.jmx`, 래퍼 `scripts/run-custom.sh` — CUSTOM-GUIDE.md 3장):
 - `RESPKB=<KB> DELAYMS=<ms>` : **응답 바디** 팽창(서버 생성) + 지연 → `?respKB=&delay=<n>ms`
-- `REQBYTES=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤 → `data.InRec1.PAD`)
+- `REQBYTES=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤 → 최상위 `_pad`)
+- `FAIL=<0~1>` : 실패 응답 주입 비율 (`?fail=`)
 
 응답 팽창은 서버(Go)가, 요청 팽창은 발생기(JMeter)가 만든다 — 데이터를 생성하는 쪽이 다르기 때문.
 
-### /custom 규격 수정 방법
+### /custom 규격과 수정 방법
 
-`custom.go` 한 파일만 수정하면 된다 (main.go 불변). 파일 안에 세 구역이 표시돼 있다:
+응답 규격: HTTP는 항상 200. `header.rtrnCd`가 `000`으로 시작하면 성공, `999`로 시작하면 실패
+(JSON 파싱 실패, `?fail=` 주입). header는 요청 header 전체 에코 + `rtrnCd`/`rsltMsg`/`inTime`/`outTime`/`procUs`.
+data는 요청 data와 같은 레코드·필드 구성에 랜덤 값 (`inRec1` → `outRec1`, 문자열은 같은 길이·최소 4자 영숫자,
+숫자는 0~9999, 배열은 같은 길이).
 
-- **[구멍 1]** 요청 규격 — 받을 JSON의 header/body 구조체
-- **[구멍 2]** 응답 규격 — 돌려줄 JSON의 구조체 (inTime/outTime/procUs는 자동 주입)
-- **[구멍 3]** 처리 로직 — 요청을 보고 응답 채우기 (resCode 분기, `time.Sleep` 지연 등)
+```json
+// 요청 (PBS 규격 예 — header 고정, data.inRec1)
+{"header":{"mdSect":"H57","svcId":"OAPBZCM001R01","langTyp":1,"userId":"TD8001", ...null 필드들...},
+ "data":{"inRec1":{"useYn":"Y","pbsMgcmCode":"","pbsTsusMgcmName":"","aNxtPbsTsusMgcmCode":"","codeUseYn":""}}}
+// 응답
+{"header":{ ...요청 header 에코..., "rtrnCd":"000","rsltMsg":"정상",
+            "inTime":"...","outTime":"...","procUs":70},
+ "data":{"outRec1":{"useYn":"K3PQ","pbsMgcmCode":"5B8U","pbsTsusMgcmName":"9ECL","aNxtPbsTsusMgcmCode":"DZJ8","codeUseYn":"R4DJ"}}}
+```
+
+**header·data 필드가 바뀌어도 서버는 안 고친다** — 발생기 쪽 `custom-body.json`만 바꾸면 된다.
+서버 로직(특정 입력에 실패 코드, 고정 응답 등)이 필요할 때만 `custom.go`를 고친다 (main.go 불변):
+
+- **[구멍 1]** 규격 상수 — 결과 코드 키(`rtrnCd`/`rsltMsg`)와 접두어(`000`/`999`), 레코드 이름 규칙(in→out)
+- **[구멍 2]** 요청/응답 형태 — header/data 모두 map (규격 무관)
+- **[구멍 3]** 처리 로직 — `processCustom`: 에코, 코드 세팅, data 랜덤. 조건 분기는 여기에
 
 수정 후 컴파일: `go build -o dummy-json .` (문법은 GO-GUIDE.md 참고)
 
-요청/응답 예 (사내 전문 규격 — header 22필드 + data.InRec1):
-
-```json
-// 요청
-{"header":{"mdSect":"H55","svcId":"uwa0000p","uuId":"...","userId":"TD7277", ...},
- "data":{"InRec1":{"USER_PSWD":"1234","USER_ID":"1234","EMAL_ADRS":"","USER_IP":"111","MAC":"111"}}}
-// 응답 — 요청 header 전체 에코 + 결과/시간 필드, data는 USER_ID/STATUS 반환
-{"header":{ ...요청 header 에코..., "rspCd":"0000","rspMsg":"정상",
-            "inTime":"...","outTime":"...","procUs":450},
- "data":{"OutRec1":{"USER_ID":"1234","STATUS":"정상"}}}
-```
-
-부하 플랜: 루트의 `custom.jmx` + 바디 템플릿 `custom-body.json` (uuId/시각/USER_ID 자동 생성,
-rspCd 0000 검증 포함). **규격을 바꾸면 custom.go와 custom-body.json을 짝으로 수정**한다.
+부하 플랜: 루트의 `custom.jmx` + 바디 템플릿 `custom-body.json` (rtrnCd 000 검증 포함).
 실행은 래퍼 한 줄 (상세: CUSTOM-GUIDE.md):
 
 ```bash
