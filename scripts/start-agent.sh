@@ -1,7 +1,7 @@
 #!/bin/bash
 # [에이전트 머신에서 실행] JMeter 에이전트(jmeter-server) 기동
 # 사용법: ./scripts/start-agent.sh <이 머신의 IP>
-# 전제: JDK17 + JMeter가 PATH에 있을 것 (DEPLOY.md 3장), 마스터와 JMeter 버전 동일
+# 전제: Java 8 이상 + JMeter가 PATH에 있을 것 (DEPLOY.md 3장), 마스터와 JMeter 버전 동일
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,8 +11,8 @@ ulimit -n 65536
 
 JBIN=java; [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ] && JBIN="$JAVA_HOME/bin/java"
 JMAJ=$("$JBIN" -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
-if [ "${JMAJ:-0}" -lt 17 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
-  echo "오류: $("$JBIN" -version 2>&1 | head -1) — JDK 17 필요 (DEPLOY.md 3장)"; exit 1
+if [ "${JMAJ:-0}" -lt 8 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
+  echo "오류: $("$JBIN" -version 2>&1 | head -1) — Java 8 이상 필요 (DEPLOY.md 3장)"; exit 1
 fi
 
 echo "=== JMeter 에이전트 기동: ${MYIP}:1099 (마스터가 -R ${MYIP} 로 접속) ==="

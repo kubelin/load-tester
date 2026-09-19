@@ -24,8 +24,8 @@ ulimit -n 65536
 
 JBIN=java; [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ] && JBIN="$JAVA_HOME/bin/java"
 JMAJ=$("$JBIN" -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
-if [ "${JMAJ:-0}" -lt 17 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
-  echo "오류: $("$JBIN" -version 2>&1 | head -1) — JDK 17 필요 (DEPLOY.md 3장)"; exit 1
+if [ "${JMAJ:-0}" -lt 8 ] && [ "${FORCE_JAVA:-0}" != "1" ]; then
+  echo "오류: $("$JBIN" -version 2>&1 | head -1) — Java 8 이상 필요 (DEPLOY.md 3장)"; exit 1
 fi
 
 mkdir -p results

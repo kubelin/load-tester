@@ -67,13 +67,14 @@ esac
 HOST=${1:-127.0.0.1}
 PORT=${2:-18082}
 
-# Java 버전 가드 — 시스템 구형 Java(1.8)가 잡히면 NoClassDefFoundError로 죽는다 (DEPLOY.md 3장)
+# Java 버전 가드 — JMeter 5.6.3은 Java 8 이상 (8u432·21 실측). 1.8인데 NoClassDefFoundError가 나면
+# headless JRE일 가능성이 크니 전체 JDK 8을 쓴다 (DEPLOY.md 3장). FORCE_JAVA=1 로 가드 무시.
 JBIN=java; [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ] && JBIN="$JAVA_HOME/bin/java"
 JMAJ=$("$JBIN" -version 2>&1 | awk -F'"' '/version/{split($2,v,"."); print (v[1]==1)?v[2]:v[1]}')
-if [ "${JMAJ:-0}" -lt 17 ]; then
+if [ "${JMAJ:-0}" -lt 8 ]; then
   echo "오류: $("$JBIN" -version 2>&1 | head -1)"
-  echo "      JMeter 5.6에는 JDK 17이 필요합니다. JAVA_HOME과 PATH 앞에 JDK17을 두세요:"
-  echo "      export JAVA_HOME=~/jdk-17.x ; export PATH=\$JAVA_HOME/bin:\$PATH"
+  echo "      JMeter 5.6.3에는 Java 8 이상이 필요합니다. JAVA_HOME과 PATH 앞에 JDK를 두세요:"
+  echo "      export JAVA_HOME=<jdk 경로> ; export PATH=\$JAVA_HOME/bin:\$PATH"
   [ "${FORCE_JAVA:-0}" != "1" ] && exit 1
 fi
 mkdir -p results
@@ -95,7 +96,7 @@ if ! grep -q "<httpSample" "$OUT" 2>/dev/null; then
   echo "----------------------------------------------------------------"
   grep -E "ERROR|Exception|Could not|Cannot|Error" "results/jmeter_$TAG.log" 2>/dev/null | tail -n 10 || tail -n 15 "results/jmeter_$TAG.log" 2>/dev/null
   echo "----------------------------------------------------------------"
-  echo "흔한 원인: custom.jmx 없음 / 바디 파일 경로 / 템플릿 함수 문법 / Java 17 미만 / 서버 주소·포트 오타"
+  echo "흔한 원인: custom.jmx 없음 / 바디 파일 경로 / 템플릿 함수 문법 / Java 8 미만 / 서버 주소·포트 오타"
   exit 1
 fi
 

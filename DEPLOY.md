@@ -22,10 +22,10 @@ git clone git@github.com:kubelin/load-tester.git   # 또는 웹에서 zip 다운
 
 | 파일 | 출처 | 용도 |
 |---|---|---|
-| JDK 17 (tar.gz) | adoptium.net → OpenJDK17 linux x64 | JMeter 실행 |
+| JDK (tar.gz) | adoptium.net → Temurin 8 또는 17, linux x64 | JMeter 실행. **발생기에 Java 1.8이 이미 있으면 생략 가능** (JMeter 5.6.3은 Java 8 이상 지원, 8u432 실측) |
 | apache-jmeter-5.6.3.zip | jmeter.apache.org/download | 부하 발생기 |
 
-반입 목록 최종: **레포 폴더 전체 + JDK tar.gz + JMeter zip** (3개 묶음).
+반입 목록 최종: **레포 폴더 전체 + JMeter zip** (+ 발생기에 Java 8 이상이 없을 때만 JDK tar.gz).
 
 ---
 
@@ -79,11 +79,12 @@ JSON 규격(필드)이 바뀌면 발생기 쪽 `custom-body.json`만 수정 (CUS
 ## 3. 발생기 VM — JDK + JMeter 설치 (압축 해제가 곧 설치)
 
 ```bash
-# 3-1. JDK
-tar -C ~ -xzf OpenJDK17*.tar.gz
-export JAVA_HOME=~/jdk-17*          # 실제 폴더명으로
+# 3-1. JDK — 이미 Java 1.8 이상이 있으면 이 단계 생략
+java -version                        # 1.8.x 이상이면 OK (JMeter 5.6.3은 Java 8+). 단 JRE(headless)가 아닌 JDK여야 함
+#   없거나 8 미만일 때만 반입한 JDK를 푼다:
+tar -C ~ -xzf OpenJDK*.tar.gz
+export JAVA_HOME=~/jdk-*             # 실제 폴더명으로
 export PATH=$JAVA_HOME/bin:$PATH
-java -version                        # 17.x 확인
 
 # 3-2. JMeter
 unzip apache-jmeter-5.6.3.zip -d ~
@@ -91,7 +92,7 @@ export PATH=~/apache-jmeter-5.6.3/bin:$PATH
 jmeter --version                     # 5.6.3 확인
 
 # 3-3. PATH 영구화 + HTML 리포트 설정(5초 버킷, APDEX 50/200ms — CUSTOM-GUIDE.md 5장)
-echo 'export PATH=$HOME/jdk-17*/bin:$HOME/apache-jmeter-5.6.3/bin:$PATH' >> ~/.bashrc
+echo 'export PATH=$HOME/apache-jmeter-5.6.3/bin:$PATH' >> ~/.bashrc     # 반입 JDK를 쓰면 $HOME/jdk-*/bin 도 앞에
 cat load-tester/jmeter-user.properties >> ~/apache-jmeter-5.6.3/bin/user.properties
 
 # 3-4. 발생기 → 서버 통신 확인
