@@ -1,6 +1,6 @@
 {
   "header": {
-    "ltrSetCnwnSect": null,
+    "ltrSetCnvnSect": null,
     "tlgrWhlLen": null,
     "mdSect": "H57",
     "esbId": null,
@@ -41,7 +41,7 @@
     "rtrnCd": null,
     "rsltMsg": null,
     "erItem": null,
-    "eaiDfrdActnSectvl": null,
+    "eaiDfrdActnSectv1": null,
     "dprtSectCd": null,
     "masterUseYn": null,
     "srPrt": null
