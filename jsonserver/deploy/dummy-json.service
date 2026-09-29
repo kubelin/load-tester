@@ -3,8 +3,10 @@ Description=dummy-json load test target server
 After=network.target
 
 [Service]
+# 기본은 액세스 로그 없음 (일반 로그는 journalctl -u dummy-json).
 # 액세스 로그 파일 기록이 필요하면 -logdir 추가 (User가 쓸 수 있는 경로여야 함):
-#   ExecStart=/opt/dummy-json/dummy-json-linux-amd64 -port 18080 -logdir /opt/dummy-json/logs
+#   ExecStart=/opt/dummy-json/dummy-json-linux-amd64 -port 18080 -logdir /opt/dummy-json/logs -logmaxmb 100 -logmaxfiles 10
+#   (100MB 단위 로테이션, 최대 10개 보관. SIGHUP 으로 파일 재오픈 가능)
 ExecStart=/opt/dummy-json/dummy-json-linux-amd64 -port 18080
 Restart=on-failure
 User=nobody

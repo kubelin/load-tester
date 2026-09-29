@@ -4,12 +4,21 @@
 # 사용법: ./server.sh start [포트]   (기본 18080)
 #         ./server.sh stop
 #         ./server.sh status
+# 환경변수(start 전용):
+#   ACCESSLOG=0     액세스 로그 끄기 (기본 1 = logs/access_*.log 기록)
+#   LOGMAXMB=100    액세스 로그 파일이 이 크기(MB)를 넘으면 새 파일로 로테이션 (0 = 안 함)
+#   LOGMAXFILES=10  logs/ 에 남길 access_*.log 최대 개수, 오래된 것부터 삭제 (0 = 무제한)
+# 예: ACCESSLOG=0 ./server.sh start            (요청 로그 없이 기동)
+#     LOGMAXMB=500 LOGMAXFILES=20 ./server.sh start
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 CMD=${1:-status}
 PORT=${2:-18080}
 PIDFILE=logs/server.pid
+ACCESSLOG=${ACCESSLOG:-1}
+LOGMAXMB=${LOGMAXMB:-100}
+LOGMAXFILES=${LOGMAXFILES:-10}
 
 # OS에 맞는 바이너리 선택 (RHEL: linux-amd64, 맥 로컬 테스트: darwin)
 case "$(uname -s)" in
@@ -32,13 +41,21 @@ case "$CMD" in
     rm -f logs/.w
     ulimit -n 65536
     TS=$(date +%Y%m%d_%H%M%S)
-    nohup "$BIN" -port "$PORT" -logdir logs > "logs/server_$TS.log" 2>&1 &
+    LOGOPTS=()
+    if [ "$ACCESSLOG" != "0" ]; then
+      LOGOPTS=(-logdir logs -logmaxmb "$LOGMAXMB" -logmaxfiles "$LOGMAXFILES")
+    fi
+    nohup "$BIN" -port "$PORT" "${LOGOPTS[@]}" > "logs/server_$TS.log" 2>&1 &
     echo $! > "$PIDFILE"
     sleep 1
     if curl -sf -m 3 "http://127.0.0.1:$PORT/health" >/dev/null; then
       echo "기동 완료 (pid $(cat "$PIDFILE"), port $PORT)"
       echo "  서버 로그:   logs/server_$TS.log"
-      echo "  액세스 로그: $(ls -t logs/access_*.log 2>/dev/null | head -1)"
+      if [ "$ACCESSLOG" != "0" ]; then
+        echo "  액세스 로그: $(ls -t logs/access_*.log 2>/dev/null | head -1)  (${LOGMAXMB}MB 단위 로테이션, 최대 ${LOGMAXFILES}개 보관)"
+      else
+        echo "  액세스 로그: 꺼짐 (ACCESSLOG=0)"
+      fi
     else
       echo "기동 실패 — logs/server_$TS.log 확인:"; tail -5 "logs/server_$TS.log"
       rm -f "$PIDFILE"; exit 1
