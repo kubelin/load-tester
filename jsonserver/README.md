@@ -99,6 +99,7 @@ PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
 | `-accesslog` | stdout | stderr |
 | `-logdir logs` | `logs/access_*.log` (로테이션·보관 적용) | stderr |
 | `./server.sh start` | `logs/access_*.log` | `logs/server_<시각>.log` |
+| `LOGDIR=/data/logs ./server.sh start` | `/data/logs/access_*.log` | `/data/logs/server_<시각>.log` (pid 파일도 여기) |
 | `ACCESSLOG=0 ./server.sh start` | **기록 안 함** | `logs/server_<시각>.log` |
 | systemd 유닛 (기본) | **기록 안 함** | `journalctl -u dummy-json` |
 
