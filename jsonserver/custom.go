@@ -2,7 +2,7 @@
 //
 // ★ 이 파일만 수정하면 된다. main.go는 건드릴 필요 없음.
 // ★ 수정 후 컴파일:  cd jsonserver && go build -o dummy-json .        (폐쇄망: GOPROXY=off 붙이기)
-//    맥에서 RHEL용:  GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dummy-json-linux-amd64 .
+// ★ 맥에서 RHEL용:  GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dummy-json-linux-amd64 .
 //
 // 수정 구역은 [구멍 1] [구멍 2] [구멍 3] 세 곳. 나머지(맨 아래 배관부)는 손대지 않는다.
 // 시간 값(inTime/outTime/procUs)은 배관부가 자동으로 채워서 응답 header에 넣어준다.
@@ -11,6 +11,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,10 +76,9 @@ type CustomResHeader struct {
 	CustomReqHeader        // 요청 header 필드 전체가 같은 이름으로 펼쳐져 에코됨
 	RspCd           string `json:"rspCd"`   // 응답 코드 ("0000" = 정상)
 	RspMsg          string `json:"rspMsg"`  // 응답 메시지
-	InTime          string `json:"inTime"`         // 자동: 요청 수신 시각 (RFC3339Nano)
-	OutTime         string `json:"outTime"`        // 자동: 응답 직전 시각
-	ProcUs          int64  `json:"procUs"`         // 자동: 서버 처리시간 (μs)
-	Pad             string `json:"_pad,omitempty"` // 자동: ?respKB= 응답 팽창용 (지우지 말 것)
+	InTime          string `json:"inTime"`  // 자동: 요청 수신 시각 (RFC3339Nano)
+	OutTime         string `json:"outTime"` // 자동: 응답 직전 시각
+	ProcUs          int64  `json:"procUs"`  // 자동: 서버 처리시간 (μs)
 }
 
 type OutRec1 struct {
@@ -88,6 +88,7 @@ type OutRec1 struct {
 
 type CustomResData struct {
 	OutRec1 OutRec1 `json:"OutRec1"`
+	Pad     string  `json:"_pad,omitempty"` // 자동: ?respKB= 응답 팽창용 — 응답 data(본문)에 붙는다 (지우지 말 것)
 }
 
 type CustomResponse struct {
@@ -135,7 +136,10 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req CustomRequest
 	var res CustomResponse
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, customMaxBody)).Decode(&req); err != nil {
+	// 바디가 비어 있으면(GET, 또는 -d 없는 curl) 빈 요청으로 보고 정상 처리한다 —
+	// ?respKB= / ?delay= 정찰은 바디 없이도 쓸 수 있어야 한다. 바디가 있는데 깨진 JSON 이면 9999.
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, customMaxBody)).Decode(&req)
+	if err != nil && err != io.EOF {
 		res.Header.RspCd = "9999"
 		res.Header.RspMsg = "INVALID_JSON: " + err.Error()
 	} else {
@@ -152,7 +156,7 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if q := r.URL.Query().Get("respKB"); q != "" {
 		if kb, perr := strconv.Atoi(q); perr == nil && kb > 0 && kb <= 65536 {
-			res.Header.Pad = strings.Repeat("x", kb*1024)
+			res.Data.Pad = strings.Repeat("x", kb*1024)
 		}
 	}
 

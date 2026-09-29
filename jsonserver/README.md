@@ -11,12 +11,19 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 | `POST /echo?delay=50ms` | 처리 지연 시뮬레이션 (Go duration 형식, 최대 30s) |
 | `POST /custom` | **커스텀 header/body 규격** — `custom.go`의 수정 구역([구멍 1~3])에서 규격·로직을 직접 정의 |
 | `POST /custom?delay=200ms` | 백엔드 처리 지연 시뮬레이션 (in-flight 유지 → 커넥션/버퍼 누적 정찰) |
-| `POST /custom?respKB=5120` | 응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박) |
+| `POST /custom?respKB=5120` | 응답 `data._pad` 를 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박). 1~65536 |
 | `GET /health` | 헬스체크 (`OK`) |
 
 ### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)
 
 `?delay=` 와 `?respKB=` 는 조합 가능하며, 게이트웨이가 쿼리스트링을 백엔드로 전달해야 적용된다.
+바디 없이도 동작하므로 curl/브라우저로 바로 확인할 수 있다 (빈 바디 = 빈 요청으로 정상 처리, 깨진 JSON 만 `rspCd 9999`):
+
+```bash
+curl -s 'http://127.0.0.1:18080/custom?respKB=1024' | wc -c      # 약 1MB
+curl -s -XPOST -d '{"header":{"userId":"TD1"},"data":{"InRec1":{"USER_ID":"1"}}}' \
+  'http://127.0.0.1:18080/custom?respKB=5120&delay=200ms'
+```
 관련 부하 플랜(루트):
 - `custom-payload.jmx` — `-Jrespkb=<KB> -Jdelayms=<ms>` : **응답 바디** 팽창(서버 생성) + 지연
 - `custom-reqbody.jmx` — `-Jreqbytes=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤)
@@ -42,7 +49,8 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 // 응답 — 요청 header 전체 에코 + 결과/시간 필드, data는 USER_ID/STATUS 반환
 {"header":{ ...요청 header 에코..., "rspCd":"0000","rspMsg":"정상",
             "inTime":"...","outTime":"...","procUs":450},
- "data":{"OutRec1":{"USER_ID":"1234","STATUS":"정상"}}}
+ "data":{"OutRec1":{"USER_ID":"1234","STATUS":"정상"},
+         "_pad":"xxxx..."}}          // ?respKB= 지정 시에만 붙음
 ```
 
 부하 플랜: 루트의 `custom-load.jmx` (uuId/시각/USER_ID 자동 생성, rspCd 0000 검증 포함).
