@@ -17,12 +17,14 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 ### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)
 
 `?delay=` 와 `?respKB=` 는 조합 가능하며, 게이트웨이가 쿼리스트링을 백엔드로 전달해야 적용된다.
-바디 없이도 동작하므로 curl/브라우저로 바로 확인할 수 있다 (빈 바디 = 빈 요청으로 정상 처리, 깨진 JSON 만 `rspCd 9999`):
+`/custom` 은 **POST 만** 받는다 (그 외 메서드는 `405 Method Not Allowed`). 바디는 비워도 되므로
+curl 로 바로 확인할 수 있다 (빈 바디 = 빈 요청으로 정상 처리, 깨진 JSON 만 `rspCd 9999`):
 
 ```bash
-curl -s 'http://127.0.0.1:18080/custom?respKB=1024' | wc -c      # 약 1MB
-curl -s -XPOST -d '{"header":{"userId":"TD1"},"data":{"InRec1":{"USER_ID":"1"}}}' \
+curl -s -X POST 'http://127.0.0.1:18080/custom?respKB=1024' | wc -c      # 약 1MB
+curl -s -X POST -d '{"header":{"userId":"TD1"},"data":{"InRec1":{"USER_ID":"1"}}}' \
   'http://127.0.0.1:18080/custom?respKB=5120&delay=200ms'
+curl -s -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:18080/custom'    # GET → 405
 ```
 관련 부하 플랜(루트):
 - `custom-payload.jmx` — `-Jrespkb=<KB> -Jdelayms=<ms>` : **응답 바디** 팽창(서버 생성) + 지연

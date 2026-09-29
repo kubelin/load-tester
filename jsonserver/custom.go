@@ -132,6 +132,12 @@ func init() {
 const customMaxBody = 64 << 20
 
 func customHandler(w http.ResponseWriter, r *http.Request) {
+	// 전문 규격 엔드포인트 — POST 만 받는다. 그 외 메서드는 405 (액세스 로그에도 남기지 않음).
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed: use POST", http.StatusMethodNotAllowed)
+		return
+	}
 	in := time.Now()
 
 	var req CustomRequest
