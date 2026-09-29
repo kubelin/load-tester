@@ -41,8 +41,9 @@ var (
 // the file, so rotation and reopen need no locking: they happen between writes.
 type accessLogger struct {
 	dir      string // "" = write to stdout, no rotation
+	name     string // file name prefix: <name>_YYYYMMDD_HHMMSS.log; lets instances share a dir
 	maxBytes int64  // rotate when the current file would exceed this; 0 = never
-	maxFiles int    // keep at most this many access_*.log files in dir; 0 = keep all
+	maxFiles int    // keep at most this many <name>_*.log files in dir; 0 = keep all
 
 	out     *os.File
 	w       *bufio.Writer
@@ -55,12 +56,12 @@ type accessLogger struct {
 // same second, a numeric suffix keeps the files apart.
 func (l *accessLogger) openFile() error {
 	stamp := time.Now().Format("20060102_150405")
-	name := filepath.Join(l.dir, "access_"+stamp+".log")
+	name := filepath.Join(l.dir, l.name+"_"+stamp+".log")
 	for i := 1; ; i++ {
 		if _, err := os.Stat(name); os.IsNotExist(err) {
 			break
 		}
-		name = filepath.Join(l.dir, fmt.Sprintf("access_%s_%d.log", stamp, i))
+		name = filepath.Join(l.dir, fmt.Sprintf("%s_%s_%d.log", l.name, stamp, i))
 	}
 	f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -88,13 +89,14 @@ func (l *accessLogger) rotate() {
 	l.prune()
 }
 
-// prune deletes the oldest access_*.log files beyond maxFiles. File names carry
-// the creation timestamp, so lexical order is chronological order.
+// prune deletes the oldest <name>_*.log files beyond maxFiles. File names carry
+// the creation timestamp, so lexical order is chronological order. Only this
+// instance's prefix is touched, so several instances can share one directory.
 func (l *accessLogger) prune() {
 	if l.maxFiles <= 0 {
 		return
 	}
-	files, err := filepath.Glob(filepath.Join(l.dir, "access_*.log"))
+	files, err := filepath.Glob(filepath.Join(l.dir, l.name+"_*.log"))
 	if err != nil || len(files) <= l.maxFiles {
 		return
 	}
@@ -155,8 +157,8 @@ func (l *accessLogger) run() {
 
 // startAccessLogger wires the channel, the output and the signal handlers, then
 // starts the single writer goroutine. dir=="" writes to stdout without rotation.
-func startAccessLogger(dir string, maxMB, maxFiles int) error {
-	l := &accessLogger{dir: dir, maxBytes: int64(maxMB) << 20, maxFiles: maxFiles}
+func startAccessLogger(dir, name string, maxMB, maxFiles int) error {
+	l := &accessLogger{dir: dir, name: name, maxBytes: int64(maxMB) << 20, maxFiles: maxFiles}
 	if dir == "" {
 		l.out = os.Stdout
 		l.w = bufio.NewWriterSize(os.Stdout, 256*1024)
@@ -184,16 +186,17 @@ func main() {
 	accessLog := flag.Bool("accesslog", false, "record per-request in/out times (async, may drop under load)")
 	logDir := flag.String("logdir", "", "write access log to <logdir>/access_YYYYMMDD_HHMMSS.log instead of stdout (implies -accesslog)")
 	logMaxMB := flag.Int("logmaxmb", 100, "rotate the access log file when it exceeds this many MB (0 = never; -logdir only)")
-	logMaxFiles := flag.Int("logmaxfiles", 10, "keep at most this many access_*.log files in -logdir, oldest deleted (0 = keep all)")
+	logMaxFiles := flag.Int("logmaxfiles", 10, "keep at most this many <logname>_*.log files in -logdir, oldest deleted (0 = keep all)")
+	logName := flag.String("logname", "access", "access log file name prefix: <logdir>/<logname>_YYYYMMDD_HHMMSS.log (give each instance its own when sharing -logdir)")
 	flag.Parse()
 
 	if *logDir != "" {
-		if err := startAccessLogger(*logDir, *logMaxMB, *logMaxFiles); err != nil {
+		if err := startAccessLogger(*logDir, *logName, *logMaxMB, *logMaxFiles); err != nil {
 			log.Fatalf("logdir: %v", err)
 		}
 		*accessLog = true
 	} else if *accessLog {
-		startAccessLogger("", 0, 0)
+		startAccessLogger("", "", 0, 0)
 	}
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -248,8 +251,8 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", *port)
 	if *logDir != "" {
-		log.Printf("dummy-json listening on %s (accesslog=file dir=%s rotate=%dMB keep=%d)",
-			addr, *logDir, *logMaxMB, *logMaxFiles)
+		log.Printf("dummy-json listening on %s (accesslog=file dir=%s name=%s rotate=%dMB keep=%d)",
+			addr, *logDir, *logName, *logMaxMB, *logMaxFiles)
 	} else {
 		log.Printf("dummy-json listening on %s (accesslog=%v)", addr, *accessLog)
 	}

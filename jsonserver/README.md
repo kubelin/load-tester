@@ -85,8 +85,11 @@ PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
                    (기동 시각으로 파일명 생성 — 재기동마다 새 파일. -accesslog 자동 포함)
 -logmaxmb 100      액세스 로그 파일이 이 크기(MB)를 넘으면 새 타임스탬프 파일로 로테이션
                    (0 = 로테이션 안 함. -logdir 일 때만 동작)
--logmaxfiles 10    <경로>/access_*.log 를 최대 이 개수만 보관, 초과분은 오래된 순으로 삭제
+-logmaxfiles 10    <경로>/<logname>_*.log 를 최대 이 개수만 보관, 초과분은 오래된 순으로 삭제
                    (0 = 무제한. 이전 기동에서 남은 파일도 개수에 포함)
+-logname access    액세스 로그 파일명 접두어 → <경로>/<logname>_YYYYMMDD_HHMMSS.log
+                   (한 디렉터리에 여러 인스턴스를 띄우면 인스턴스마다 다르게 줘야
+                   로테이션·보관 정리가 서로의 파일을 건드리지 않음. server.sh 는 access_<포트> 로 줌)
 ```
 
 로그 한 줄 형식: `클라IP:포트 in=<epoch ms> out=<epoch ms> proc_us=<처리 μs> bytes=<수신 바이트>`
@@ -98,10 +101,14 @@ PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
 | 옵션 없이 실행 (`-port` 만) | **기록 안 함** | stderr |
 | `-accesslog` | stdout | stderr |
 | `-logdir logs` | `logs/access_*.log` (로테이션·보관 적용) | stderr |
-| `./server.sh start` | `logs/access_*.log` | `logs/server_<시각>.log` |
-| `LOGDIR=/data/logs ./server.sh start` | `/data/logs/access_*.log` | `/data/logs/server_<시각>.log` (pid 파일도 여기) |
-| `ACCESSLOG=0 ./server.sh start` | **기록 안 함** | `logs/server_<시각>.log` |
+| `./server.sh start [포트]` | `logs/access_<포트>_*.log` | `logs/server_<포트>_<시각>.log` (pid: `logs/server_<포트>.pid`) |
+| `LOGDIR=/data/logs ./server.sh start` | `/data/logs/access_<포트>_*.log` | `/data/logs/server_<포트>_<시각>.log` |
+| `ACCESSLOG=0 ./server.sh start` | **기록 안 함** | `logs/server_<포트>_<시각>.log` |
 | systemd 유닛 (기본) | **기록 안 함** | `journalctl -u dummy-json` |
+
+여러 인스턴스: `./server.sh start 18080 && ./server.sh start 18081` 처럼 포트만 다르게 주면
+같은 `logs/` 안에서 pid·로그가 포트별로 분리된다. `stop`/`status` 도 포트를 붙여서 호출하고,
+`status` 에 포트를 생략하면 실행 중인 인스턴스를 전부 보여준다. 다른 빌드를 띄우려면 `BIN=<경로>`.
 
 로테이션 방식: 파일 쓰기는 로거 고루틴 하나만 하므로 잠금 없이 크기 검사 후 새 파일을 연다.
 요청 처리 경로는 채널에 한 줄 넣는 것뿐이라 로테이션 순간에도 응답 지연이 생기지 않는다.
