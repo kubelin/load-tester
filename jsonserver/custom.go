@@ -140,6 +140,43 @@ const customMaxBody = 64 << 20
 // (문자열은 불변이라 고루틴 간 공유 안전, 고TPS 에서 할당·GC 부담 제거).
 var defaultPad = strings.Repeat("x", defaultRespKB*1024)
 
+// customEnvelope: header/data 키의 존재 여부를 구분하기 위한 1차 디코딩용 (규격 구조체로 바로
+// 풀면 키가 빠져도 빈 값으로 채워져서 "없음" 과 "빈 값" 을 구분할 수 없다).
+type customEnvelope struct {
+	Header json.RawMessage `json:"header"`
+	Data   json.RawMessage `json:"data"`
+}
+
+// isJSONObject: raw 가 존재하고 null 이 아니며 JSON 객체({...})인지.
+func isJSONObject(raw json.RawMessage) bool {
+	t := strings.TrimSpace(string(raw))
+	return len(t) > 0 && t[0] == '{'
+}
+
+// decodeCustom: 바디를 구조 검사한 뒤 req 에 채운다. 정상이면 ("", ""), 오류면 (rspCd, rspMsg).
+func decodeCustom(body io.Reader, req *CustomRequest) (string, string) {
+	var env customEnvelope
+	switch err := json.NewDecoder(body).Decode(&env); {
+	case err == io.EOF:
+		return "9999", "EMPTY_BODY: request body required"
+	case err != nil:
+		return "9999", "INVALID_JSON: " + err.Error()
+	}
+	if !isJSONObject(env.Header) {
+		return "9999", "MISSING_HEADER: header object required"
+	}
+	if !isJSONObject(env.Data) {
+		return "9999", "MISSING_DATA: data object required"
+	}
+	if err := json.Unmarshal(env.Header, &req.Header); err != nil {
+		return "9999", "INVALID_HEADER: " + err.Error()
+	}
+	if err := json.Unmarshal(env.Data, &req.Data); err != nil {
+		return "9999", "INVALID_DATA: " + err.Error()
+	}
+	return "", ""
+}
+
 func customHandler(w http.ResponseWriter, r *http.Request) {
 	// 전문 규격 엔드포인트 — POST 만 받는다. 그 외 메서드는 405 (액세스 로그에도 남기지 않음).
 	if r.Method != http.MethodPost {
@@ -151,19 +188,20 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req CustomRequest
 	var res CustomResponse
-	// 바디 없는 POST 는 오류(9999 EMPTY_BODY), 깨진 JSON 도 오류(9999 INVALID_JSON).
-	// 정찰용 호출도 최소 '{}' 는 보내야 한다. 필수 필드 검사는 [구멍 3] processCustom 에서.
-	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, customMaxBody)).Decode(&req)
-	parsed := err == nil
-	switch {
-	case err == io.EOF:
-		res.Header.RspCd = "9999"
-		res.Header.RspMsg = "EMPTY_BODY: request body required"
-	case err != nil:
-		res.Header.RspCd = "9999"
-		res.Header.RspMsg = "INVALID_JSON: " + err.Error()
-	default:
+	// 전문 구조 검사 — 아래 중 하나라도 걸리면 9999 (패딩 없는 작은 오류 전문):
+	//   EMPTY_BODY      바디 없음
+	//   INVALID_JSON    JSON 문법 오류
+	//   MISSING_HEADER  "header" 객체 없음(또는 null·객체 아님)
+	//   MISSING_DATA    "data" 객체 없음(또는 null·객체 아님)
+	// header/data 가 빈 객체({})면 구조는 갖춘 것으로 보고 통과시킨다 — 개별 필드 필수 검사는
+	// [구멍 3] processCustom 에서 업무 코드(예: 4001)로 처리한다.
+	rspCd, rspMsg := decodeCustom(http.MaxBytesReader(w, r.Body, customMaxBody), &req)
+	parsed := rspCd == ""
+	if parsed {
 		processCustom(&req, &res)
+	} else {
+		res.Header.RspCd = rspCd
+		res.Header.RspMsg = rspMsg
 	}
 
 	// 부하 정찰 레버 (쿼리 파라미터, 게이트웨이가 백엔드로 전달해야 함):
