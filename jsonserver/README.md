@@ -11,7 +11,7 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 | `POST /echo?delay=50ms` | 처리 지연 시뮬레이션 (Go duration 형식, 최대 30s) |
 | `POST /custom` | **커스텀 header/body 규격** — `custom.go`의 수정 구역([구멍 1~3])에서 규격·로직을 직접 정의 |
 | `POST /custom?delay=200ms` | 백엔드 처리 지연 시뮬레이션 (in-flight 유지 → 커넥션/버퍼 누적 정찰) |
-| `POST /custom?respKB=5120` | 응답 `data._pad` 를 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박). 0~65536. **생략 시 8KB** (`custom.go` 의 `defaultRespKB`), `respKB=0` 이면 패딩 없음 |
+| `POST /custom?respKB=5120` | 응답 `data._pad` 를 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박). 1~65536. **생략·0·잘못된 값은 8KB** (`custom.go` 의 `defaultRespKB`) |
 | `GET /health` | 헬스체크 (`OK`) |
 
 ### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)
@@ -52,7 +52,7 @@ curl -s -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:18080/custom'    # GE
 {"header":{ ...요청 header 에코..., "rspCd":"0000","rspMsg":"정상",
             "inTime":"...","outTime":"...","procUs":450},
  "data":{"OutRec1":{"USER_ID":"1234","STATUS":"정상"},
-         "_pad":"xxxx..."}}          // 기본 8KB. ?respKB=N 으로 조절, ?respKB=0 이면 생략
+         "_pad":"xxxx..."}}          // 기본 8KB (respKB 생략·0 포함). ?respKB=N 으로 조절
 ```
 
 부하 플랜: 루트의 `custom-load.jmx` (uuId/시각/USER_ID 자동 생성, rspCd 0000 검증 포함).
