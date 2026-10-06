@@ -143,3 +143,109 @@ done
   **6만+ 연결은 반드시 스웜(여러 호스트)** 으로.
 - **메모리**: 연결당 ~164KB → 5만 연결 ≈ 8GB.
 - **의존성**: `pip install --user "websockets==8.1"` (python 3.6 호환).
+
+## 시세 수신 + 원문 저장 (JSON 구독, 파싱 없음)
+
+증권사 스타일 WebSocket(JSON 구독 요청 → 시세 스트리밍)에서 **수신 데이터를 파싱 없이
+그대로 저장**하는 클라이언트. 연결별 시작/종료 시각을 찍고, 대량 접속 시 저장을 끈다.
+
+| 파일 | 용도 |
+|---|---|
+| `scripts/ws_streamclient.py` | JSON 구독 → 수신 원문 저장 클라이언트 |
+| `scripts/run-ws-stream.sh` | 실행 래퍼 |
+
+### 기본 — 소수 연결 + 전체 원문 저장
+
+```bash
+# 구독 JSON을 파일 또는 인라인으로. {KEY}=종목코드, {IDX}=연결번호 로 치환됨
+WS_SUB='{"header":{"tr_id":"H0STCNT0"},"body":{"input":{"tr_key":"{KEY}"}}}' \
+WS_SUBKEYS='005930,000660,035720' \
+./scripts/run-ws-stream.sh 20 10.0.0.50 8080 /ws/quote 120
+```
+
+저장 결과 (`dumps/`, `WS_DUMPDIR`로 변경):
+```
+dumps/conn_00000.dat       연결 0이 받은 원문 전부 (한 줄 = 수신시각ms + 원문 그대로)
+  # start 2026-.. conn=0 key=005930 uri=...     ← 시작시각
+  1791206837065	{"type":"quote","seq":1,...}    ← 수신시각 + 원문
+  ...
+  # end 2026-.. msgs=80 bytes=4951               ← 종료시각 + 수신 집계
+dumps/sessions_<시각>.csv   연결별 시작/첫틱/마지막/종료 시각 + 수신 개수·바이트
+```
+
+### 대량 접속 — 저장 OFF (부하만)
+
+```bash
+WS_SUB='{"body":{"tr_key":"{KEY}"}}' WS_SUBKEYS='005930' \
+WS_DUMP=0 ./scripts/run-ws-stream.sh 5000 10.0.0.50 8080 /ws/quote 180
+#   → 원문 파일 안 쌓음. 세션 요약 CSV만 남음 (가벼움)
+```
+
+### 표본만 저장 — 대량이지만 몇 개는 원문 확인
+
+```bash
+WS_DUMP=1 DUMP_N=50 ./scripts/run-ws-stream.sh 5000 ...
+#   → 5000연결 걸되 앞 50개만 원문 저장 (나머지는 수신만)
+```
+
+| env | 기본 | 설명 |
+|---|---|---|
+| `WS_SUB` / `WS_SUBFILE` | 없음 | 구독 JSON (인라인 / 파일). 없으면 접속만 하고 수신 |
+| `WS_SUBKEYS` | 없음 | 종목코드 목록, 연결마다 라운드로빈 → `{KEY}` 치환 |
+| `WS_DUMP` | `1`(ON) | 수신 원문 저장. **대량은 `0`으로 끄기** |
+| `DUMP_N` | `0`(전체) | 앞 N개 연결만 저장 (표본) |
+| `WS_DUMPDIR` | `dumps` | 저장 디렉터리 |
+
+> ⚠️ 대량 + 전체저장은 디스크 폭발: 5000연결 × 10msg/s × 180s = 900만 줄. 대량은 `WS_DUMP=0`,
+> 데이터 확인은 소수 연결 또는 `DUMP_N` 표본으로. 원문 파일은 연결당 FD 1개를 추가로 쓴다.
+
+## TCP 생소켓 — 고정길이 전문 수신 (WebSocket 아님)
+
+증권사 FEP 등 **생 TCP + 고정길이(fixed-length) 전문** 시스템용. 구독 전문 전송 후
+수신 전문을 파싱 없이 그대로 저장. WebSocket 버전(`ws_streamclient.py`)과 구조 동일,
+프레이밍만 고정길이다. 표준 라이브러리만 써서 **의존성 없음** (websockets 설치 불필요).
+
+| 파일 | 용도 |
+|---|---|
+| `scripts/tcp_streamclient.py` | 고정길이 TCP 전문 수신 + 원문 저장 |
+| `scripts/run-tcp-stream.sh` | 실행 래퍼 |
+
+### 핵심 — 고정길이 프레이밍
+
+`TCP_MSGLEN`으로 전문 1건의 바이트 수를 지정하면, 정확히 그만큼씩 읽어(`readexactly`)
+한 전문으로 센다. 경계를 파싱 없이 길이로만 자른다.
+
+```bash
+# 전문 200바이트, 구독 후 수신, text로 저장(눈으로 확인)
+TCP_MSGLEN=200 TCP_SUBFILE=sub.txt TCP_SUBKEYS='005930,000660' TCP_DUMPFMT=text \
+  ./scripts/run-tcp-stream.sh 20 10.0.0.50 9000 120
+```
+
+### 대량 부하 — 저장 OFF
+
+```bash
+TCP_MSGLEN=200 TCP_SUB='SUB|{KEY}' TCP_SUBKEYS='005930' TCP_DUMP=0 \
+  ./scripts/run-tcp-stream.sh 5000 10.0.0.50 9000 180
+```
+
+### 저장 형식 3가지
+
+| `TCP_DUMPFMT` | 파일 | 내용 |
+|---|---|---|
+| `hex` (기본) | `conn_<idx>.dat` | `수신ms \t 16진문자열` — **바이너리 전문 안전** |
+| `text` | `conn_<idx>.dat` | `수신ms \t 디코드문자열` — EUC-KR 등 텍스트 전문 눈으로 확인 |
+| `raw` | `conn_<idx>.bin` | 원본 바이트 그대로 (고정길이라 나중에 N으로 분할 가능) |
+
+| env | 기본 | 설명 |
+|---|---|---|
+| `TCP_MSGLEN` | (필수) | 고정 전문 길이(바이트) |
+| `TCP_SUB`/`TCP_SUBFILE` | 없음 | 구독 전문 ({IDX}/{KEY} 치환). 없으면 접속만 하고 수신 |
+| `TCP_SUBKEYS` | 없음 | 종목 라운드로빈 → `{KEY}` |
+| `TCP_ENCODING` | `utf-8` | 구독 전문·text덤프 인코딩 (국내 전문은 `euc-kr`/`cp949` 흔함) |
+| `TCP_DUMP` | `1` | 저장. 대량은 `0` |
+| `DUMP_N` | `0`(전체) | 앞 N개 연결만 저장 |
+| `TCP_DUMPFMT` | `hex` | hex / text / raw |
+| `TCP_DUMPDIR` | `dumps` | 저장 위치 |
+
+> 전문 그룹마다 길이가 다르면 — 지금은 한 실행에 한 길이(`TCP_MSGLEN`)만 받는다. 길이가
+> 헤더에 들어있는 가변 프레이밍이 필요하면 헤더 위치·형식을 알려주면 추가한다.

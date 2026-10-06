@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python 소켓 테스트 가이드</title>
+<style>
+  :root{
+    --bg:#fafaf8; --fg:#1a1a1a; --muted:#666; --line:#dcdcd6;
+    --accent:#0b5fa5; --accent2:#7a3fb0; --ok:#1a7f37; --warn:#b45309; --bad:#b91c1c;
+    --card:#fff; --code:#f3f2ee;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1a1a1c; --fg:#e8e8e6; --muted:#9a9a96; --line:#333;
+      --accent:#5aa9e6; --accent2:#b588e0; --ok:#4ac26b; --warn:#e0a048; --bad:#e86b6b;
+      --card:#242426; --code:#2a2a2c;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 16px 80px;font:15px/1.7 -apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--fg)}
+  main{max-width:880px;margin:0 auto}
+  h1{font-size:26px;border-bottom:3px solid var(--accent);padding:24px 0 12px;margin:0 0 6px}
+  h1 small{display:block;font-size:14px;color:var(--muted);font-weight:400;margin-top:4px}
+  h2{font-size:20px;margin:42px 0 10px;padding-left:10px;border-left:5px solid var(--accent)}
+  h3{font-size:16px;margin:24px 0 8px;color:var(--accent)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--card);font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:color-mix(in srgb, var(--accent) 12%, var(--card))}
+  code{background:var(--code);padding:1px 6px;border-radius:4px;font-size:12.5px;font-family:"SF Mono",Menlo,Consolas,monospace}
+  pre{background:var(--code);padding:12px 14px;border-radius:6px;overflow-x:auto;font-size:12.5px;line-height:1.5;font-family:"SF Mono",Menlo,Consolas,monospace}
+  .ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:14px 0}
+  .tip{border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--card));padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0}
+  .big{font-size:15px}
+  .tool{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:12px 16px;margin:10px 0}
+  .tool .ic{flex:0 0 42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;background:color-mix(in srgb,var(--accent) 15%,var(--card))}
+  .num{font-size:22px;font-weight:700;color:var(--accent)}
+  .k{color:var(--accent2);font-weight:600}
+  footer{margin-top:56px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Python 소켓 테스트 가이드
+<small>socket-test · WebSocket / TCP 수신·부하 도구 + 발생기 용량 산정</small></h1>
+
+<h2>1. 도구 — 뭘 언제 쓰나</h2>
+
+<div class="tool"><div class="ic">📏</div><div>
+<b>ws_loadclient.py</b> — <span class="k">정밀 측정</span> (WebSocket)<br>
+seq 누락, hello→첫틱 지연, 틱 간격 p50/p99, 느린소비자 공격. <b>소수 연결로 데이터 품질 검증</b>.
+</div></div>
+
+<div class="tool"><div class="ic">💾</div><div>
+<b>ws_streamclient.py</b> — <span class="k">수신 원문 저장</span> (WebSocket)<br>
+JSON 구독 → 받은 데이터를 파싱 없이 그대로 파일로. 연결별 시작/종료 시각 기록.
+</div></div>
+
+<div class="tool"><div class="ic">🔌</div><div>
+<b>tcp_streamclient.py</b> — <span class="k">고정길이 전문 수신</span> (생 TCP)<br>
+증권사 FEP 스타일. <code>TCP_MSGLEN</code>으로 전문 길이 지정 → 정확히 그만큼씩 읽어 저장. 의존성 없음.
+</div></div>
+
+<div class="tool"><div class="ic">🌐</div><div>
+<b>run-ws-multi / run-ws-swarm + ws_aggregate</b> — <span class="k">대규모 부하·서버 한계</span><br>
+여러 프로세스·여러 호스트로 분산해 서버가 여러 소스에서 연결받게 → 실한계 탐색.
+</div></div>
+
+<h2>2. 소켓 몇 개까지 커버되나 — 발생기 용량</h2>
+
+<p class="big">핵심: 한계는 CPU·메모리가 아니라 <b class="bad">임시 포트(ephemeral port)</b>다.
+소켓 하나 = 출발 포트 하나. 단일 서버(IP:포트)로 연결할 때 <b>동시 연결 최대 = 임시 포트 개수</b>.</p>
+
+<div class="card">
+<b>공식</b><br>
+<code>한 발생기의 동시 소켓 최대 ≈ 임시 포트 개수</code> &nbsp;(단일 타겟 기준)<br>
+<code>전체 = 발생기 대수 × 발생기당 포트 수</code> &nbsp;(스웜)
+</div>
+
+<h3>발생기 1대 상한 (단일 타겟)</h3>
+<table>
+<tr><th>환경 / 설정</th><th>임시 포트 범위</th><th>최대 동시 소켓</th></tr>
+<tr><td>macOS 기본</td><td>49152–65535</td><td><span class="num">~16,000</span></td></tr>
+<tr><td>macOS (포트 확장)</td><td>32768–65535</td><td><span class="num">~32,000</span></td></tr>
+<tr><td>Linux 기본</td><td>32768–60999</td><td><span class="num">~28,000</span></td></tr>
+<tr><td>Linux (포트 확장)</td><td>1024–65000</td><td><span class="num">~64,000</span></td></tr>
+</table>
+<p>포트 외 자원은 대개 여유: 메모리 <b>연결당 ~164KB</b>(3만 연결 ≈ 5GB), FD는 <code>ulimit -n</code>을
+연결 수 이상으로. 단, Python은 <b>프로세스당 1코어</b>라 수신율이 높으면 CPU가 먼저 찰 수 있다.</p>
+
+<div class="tip">
+<b>⚠️ 멀티 프로세스로도 포트 상한은 못 넘는다.</b> <code>run-ws-multi</code>로 프로세스를 8개 띄워도
+임시 포트는 <b>머신(출발 IP) 단위로 공유</b>. 8프로세스 × 4천 = 3.2만이 아니라, 합쳐서 ~포트수가 상한.
+멀티프로세스는 <b>CPU를 더 쓰려는</b> 것이지 포트를 늘리는 게 아니다.
+</div>
+
+<h3>그 이상 — 스웜 (여러 발생기)</h3>
+<p>포트 풀을 늘리는 게 아니라 <b>출발 IP를 늘려야</b> 한다. 발생기 N대면 각자 포트 풀을 가지므로:</p>
+<table>
+<tr><th>구성</th><th>커버 가능 소켓</th></tr>
+<tr><td>발생기 1대 (Linux, 포트 확장)</td><td>~64,000</td></tr>
+<tr><td>발생기 3대 (스웜)</td><td><span class="num">~19만</span></td></tr>
+<tr><td>발생기 10대 (스웜)</td><td><span class="num">~64만</span></td></tr>
+</table>
+<p>그래서 <b>6만+ 연결은 반드시 <code>run-ws-swarm</code></b>(여러 호스트)으로. 이게 "서버가 여러
+곳에서 연결받는 구조"가 필요한 실질적 이유다.</p>
+
+<div class="tip">
+<b>WebSocket은 HTTP보다 포트 압박이 크다.</b> HTTP는 keep-alive로 커넥션을 재사용하지만,
+WebSocket/TCP 세션은 연결 하나가 <b>포트 하나를 끝까지 점유</b>한다. 그래서 "동시 유지 소켓 수"가
+곧 포트 수에 직결된다.
+</div>
+
+<h2>3. 측정 모드 — ws_loadclient.py</h2>
+<pre>pip install --user "websockets==8.1"
+# &lt;연결&gt; &lt;간격ms&gt; &lt;지속s&gt; &lt;호스트&gt; &lt;포트&gt; &lt;경로&gt; &lt;램프s&gt;
+python3 scripts/ws_loadclient.py 500 100 120 10.0.0.50 8080 /ws/test 8
+WS_LOG=1 python3 scripts/ws_loadclient.py ...     # 결과 파일 저장
+STALL_N=250 python3 scripts/ws_loadclient.py ...  # 느린소비자 250개 (executor 고갈 유도)</pre>
+<p>출력: 연결 성립/거절, <b>seq 누락</b>, hello→첫틱 p50/p99, <b>틱 간격 p50/p99</b>, 세션별 p99 분포, 종료코드.</p>
+
+<h2>4. 수신 저장 모드</h2>
+
+<h3>4-A. WebSocket (JSON 구독)</h3>
+<pre>WS_SUB='{"header":{"tr_id":"H0STCNT0"},"body":{"input":{"tr_key":"{KEY}"}}}' \
+WS_SUBKEYS='005930,000660' \
+./scripts/run-ws-stream.sh 20 10.0.0.50 8080 /ws/quote 120</pre>
+<p><code>{KEY}</code>=종목(라운드로빈), <code>{IDX}</code>=연결번호 치환. 구독 JSON은 시스템마다 자유.</p>
+
+<h3>4-B. 생 TCP (고정길이 전문)</h3>
+<pre>TCP_MSGLEN=200 TCP_SUB='SUB|{KEY}' TCP_SUBKEYS='005930' \
+TCP_DUMPFMT=text TCP_ENCODING=euc-kr \
+./scripts/run-tcp-stream.sh 20 10.0.0.50 9000 120</pre>
+<p>저장 형식: <code>hex</code>(바이너리 안전) / <code>text</code>(디코드) / <code>raw</code>(.bin 원본).
+국내 FEP 전문은 <code>euc-kr</code> 흔함.</p>
+
+<h3>저장 결과 (공통)</h3>
+<pre>dumps/conn_&lt;idx&gt;.dat    # start .. ← 시작시각
+                        &lt;수신ms&gt;  &lt;원문 그대로&gt;
+                        # end .. records=.. ← 종료시각+집계
+dumps/*_sessions_*.csv  연결별 시작/첫수신/마지막/종료 시각 + 수신 개수·바이트</pre>
+
+<div class="tip">
+<b>대량 + 전체저장은 디스크 폭발.</b> 5천연결 × 10msg/s × 180s = 900만 줄. 대량은 <code>WS_DUMP=0</code>
+/ <code>TCP_DUMP=0</code>, 데이터 확인은 소수 연결이나 <code>DUMP_N=50</code>(앞 50개만) 표본으로.
+원문 저장은 연결당 FD를 1개 더 쓴다(소켓+파일).
+</div>
+
+<h2>5. 대량 부하 — 서버 실한계 찾기</h2>
+<pre># 한 박스 멀티프로세스
+./scripts/run-ws-multi.sh 20000 10.0.0.50 8080 /ws/test 1000 180 8
+# 여러 발생기 (서버가 여러 IP에서 연결받음)
+./scripts/run-ws-swarm.sh "load@10.0.0.11,load@10.0.0.12" 40000 10.0.0.50 8080 /ws/test 1000 180
+# 사다리로 한계 탐색
+for N in 20000 40000 60000; do ./scripts/run-ws-multi.sh $N 10.0.0.50 8080 /ws/test 1000 120 8; done</pre>
+<table>
+<tr><th>합산 판정 신호</th><th>의미</th></tr>
+<tr><td>거절(close 1003) 증가</td><td>서버 커넥션 상한 = <b>연결 한계</b></td></tr>
+<tr><td>seq 누락 발생</td><td>서버 데이터 유실 = <b>처리 한계</b></td></tr>
+<tr><td>틱 간격 p99 ≫ 요청 간격</td><td>스트리밍 지연 = <b>cadence 한계</b></td></tr>
+<tr><td>거절·누락 없이 오류만</td><td><b>발생기 포화</b> → 스웜으로 호스트 더 늘려 재확인</td></tr>
+</table>
+
+<footer>
+socket-test 문서 · 짝꿍: SOCKET-TESTING.md(실행 가이드) / README.md(상세) · HTTP 킷은 루트 TUNING.md·TESTING.md
+</footer>
+
+</main>
+</body>
+</html>
