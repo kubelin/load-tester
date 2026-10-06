@@ -17,15 +17,19 @@ Go 표준 라이브러리만 사용한 정적 바이너리라 RHEL 8에 복사�
 ### 부하 정찰 레버 (게이트웨이 breaking point 탐색용)
 
 `?delay=` 와 `?respKB=` 는 조합 가능하며, 게이트웨이가 쿼리스트링을 백엔드로 전달해야 적용된다.
-`/custom` 은 **POST 만** 받는다 (그 외 메서드는 `405 Method Not Allowed`). 바디는 비워도 되므로
-curl 로 바로 확인할 수 있다 (빈 바디 = 빈 요청으로 정상 처리, 깨진 JSON 만 `rspCd 9999`):
+`/custom` 은 **POST + JSON 바디** 만 받는다. GET 등 다른 메서드는 `405 Method Not Allowed`,
+바디가 없으면 `rspCd 9999 EMPTY_BODY`, 깨진 JSON 이면 `rspCd 9999 INVALID_JSON`.
+정찰용 호출도 최소 `{}` 는 보내야 한다:
 
 ```bash
-curl -s -X POST 'http://127.0.0.1:18080/custom?respKB=1024' | wc -c      # 약 1MB
+curl -s -X POST -d '{}' 'http://127.0.0.1:18080/custom?respKB=1024' | wc -c      # 약 1MB
 curl -s -X POST -d '{"header":{"userId":"TD1"},"data":{"InRec1":{"USER_ID":"1"}}}' \
   'http://127.0.0.1:18080/custom?respKB=5120&delay=200ms'
-curl -s -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:18080/custom'    # GET → 405
+curl -s -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:18080/custom'        # GET → 405
+curl -s -X POST 'http://127.0.0.1:18080/custom' | grep -o '"rspMsg":"[^"]*"'     # EMPTY_BODY
 ```
+
+메서드 정리: `GET` 은 `/echo` 와 `/health`(server.sh 기동 확인용) 만 받고, 그 외는 전부 오류다.
 관련 부하 플랜(루트):
 - `custom-payload.jmx` — `-Jrespkb=<KB> -Jdelayms=<ms>` : **응답 바디** 팽창(서버 생성) + 지연
 - `custom-reqbody.jmx` — `-Jreqbytes=<byte>` : **요청 바디** 팽창(JMeter 생성, 랜덤)

@@ -151,13 +151,18 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req CustomRequest
 	var res CustomResponse
-	// 바디가 비어 있으면(GET, 또는 -d 없는 curl) 빈 요청으로 보고 정상 처리한다 —
-	// ?respKB= / ?delay= 정찰은 바디 없이도 쓸 수 있어야 한다. 바디가 있는데 깨진 JSON 이면 9999.
+	// 바디 없는 POST 는 오류(9999 EMPTY_BODY), 깨진 JSON 도 오류(9999 INVALID_JSON).
+	// 정찰용 호출도 최소 '{}' 는 보내야 한다. 필수 필드 검사는 [구멍 3] processCustom 에서.
 	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, customMaxBody)).Decode(&req)
-	if err != nil && err != io.EOF {
+	parsed := err == nil
+	switch {
+	case err == io.EOF:
+		res.Header.RspCd = "9999"
+		res.Header.RspMsg = "EMPTY_BODY: request body required"
+	case err != nil:
 		res.Header.RspCd = "9999"
 		res.Header.RspMsg = "INVALID_JSON: " + err.Error()
-	} else {
+	default:
 		processCustom(&req, &res)
 	}
 
@@ -165,6 +170,7 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	//   ?delay=200ms  서버 처리 지연 (in-flight 유지 → 커넥션/버퍼 누적)
 	//   ?respKB=5120  응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박)
 	//                 생략·defaultRespKB 미만·잘못된 값이면 defaultRespKB(위 [구멍 3] 상단) 적용
+	//                 파싱 실패(9999 EMPTY_BODY/INVALID_JSON) 응답에는 패딩을 붙이지 않는다
 	if d := r.URL.Query().Get("delay"); d != "" {
 		if dur, perr := time.ParseDuration(d); perr == nil && dur > 0 && dur <= 30*time.Second {
 			time.Sleep(dur)
@@ -177,6 +183,8 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	switch {
+	case !parsed:
+		// 오류 전문은 작게 나간다
 	case kb == defaultRespKB:
 		res.Data.Pad = defaultPad
 	case kb > 0:
