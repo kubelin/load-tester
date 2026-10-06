@@ -102,6 +102,10 @@ type CustomResponse struct {
 //   - 지연 시뮬레이션이 필요하면 time.Sleep(50 * time.Millisecond) 처럼 사용
 // ============================================================================
 
+// defaultRespKB: ?respKB= 를 안 줬을 때 응답 data._pad 에 붙이는 기본 크기(KB).
+// 0 이면 기본 패딩 없음. 쿼리로 ?respKB=0 을 주면 그 요청만 패딩을 끈다.
+const defaultRespKB = 8
+
 func processCustom(req *CustomRequest, res *CustomResponse) {
 	res.Header.CustomReqHeader = req.Header // 요청 header 그대로 에코
 
@@ -131,6 +135,10 @@ func init() {
 // customMaxBody: /custom 은 큰 요청 바디(부하 정찰용)를 받을 수 있도록 넉넉히 (64MB).
 const customMaxBody = 64 << 20
 
+// defaultPad: 기본 패딩은 요청마다 새로 만들지 않고 기동 시 한 번 만들어 재사용한다
+// (문자열은 불변이라 고루틴 간 공유 안전, 고TPS 에서 할당·GC 부담 제거).
+var defaultPad = strings.Repeat("x", defaultRespKB*1024)
+
 func customHandler(w http.ResponseWriter, r *http.Request) {
 	// 전문 규격 엔드포인트 — POST 만 받는다. 그 외 메서드는 405 (액세스 로그에도 남기지 않음).
 	if r.Method != http.MethodPost {
@@ -155,15 +163,23 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	// 부하 정찰 레버 (쿼리 파라미터, 게이트웨이가 백엔드로 전달해야 함):
 	//   ?delay=200ms  서버 처리 지연 (in-flight 유지 → 커넥션/버퍼 누적)
 	//   ?respKB=5120  응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박)
+	//                 생략 시 defaultRespKB(위 [구멍 3] 상단), 0 이면 패딩 없음
 	if d := r.URL.Query().Get("delay"); d != "" {
 		if dur, perr := time.ParseDuration(d); perr == nil && dur > 0 && dur <= 30*time.Second {
 			time.Sleep(dur)
 		}
 	}
+	kb := defaultRespKB
 	if q := r.URL.Query().Get("respKB"); q != "" {
-		if kb, perr := strconv.Atoi(q); perr == nil && kb > 0 && kb <= 65536 {
-			res.Data.Pad = strings.Repeat("x", kb*1024)
+		if v, perr := strconv.Atoi(q); perr == nil && v >= 0 && v <= 65536 {
+			kb = v
 		}
+	}
+	switch {
+	case kb == defaultRespKB:
+		res.Data.Pad = defaultPad
+	case kb > 0:
+		res.Data.Pad = strings.Repeat("x", kb*1024)
 	}
 
 	out := time.Now()
