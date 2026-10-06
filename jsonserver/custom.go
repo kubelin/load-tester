@@ -102,9 +102,9 @@ type CustomResponse struct {
 //   - 지연 시뮬레이션이 필요하면 time.Sleep(50 * time.Millisecond) 처럼 사용
 // ============================================================================
 
-// defaultRespKB: 응답 data._pad 의 기본 크기(KB). ?respKB= 를 안 주거나 0 이하(또는 숫자가
-// 아님)이면 이 값이 적용된다 — JMeter 플랜의 -Jrespkb 기본값 0 도 8KB 로 나간다.
-// 1 이상을 주면 그 크기로 덮어쓴다. 패딩을 아예 없애려면 이 상수를 0 으로.
+// defaultRespKB: 응답 data._pad 의 기본이자 최소 크기(KB). ?respKB= 를 안 주거나 이 값보다
+// 작거나(0~7 포함) 숫자가 아니면 이 값이 적용된다 — JMeter 플랜의 -Jrespkb 기본값 0 도 8KB 로 나간다.
+// 이 값 이상을 주면 그 크기로 덮어쓴다. 패딩을 아예 없애려면 이 상수를 0 으로.
 const defaultRespKB = 8
 
 func processCustom(req *CustomRequest, res *CustomResponse) {
@@ -164,7 +164,7 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	// 부하 정찰 레버 (쿼리 파라미터, 게이트웨이가 백엔드로 전달해야 함):
 	//   ?delay=200ms  서버 처리 지연 (in-flight 유지 → 커넥션/버퍼 누적)
 	//   ?respKB=5120  응답을 N KB로 팽창 (게이트웨이가 큰 응답 버퍼링 → direct memory 압박)
-	//                 생략·0·잘못된 값이면 defaultRespKB(위 [구멍 3] 상단) 적용
+	//                 생략·defaultRespKB 미만·잘못된 값이면 defaultRespKB(위 [구멍 3] 상단) 적용
 	if d := r.URL.Query().Get("delay"); d != "" {
 		if dur, perr := time.ParseDuration(d); perr == nil && dur > 0 && dur <= 30*time.Second {
 			time.Sleep(dur)
@@ -172,7 +172,7 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	kb := defaultRespKB
 	if q := r.URL.Query().Get("respKB"); q != "" {
-		if v, perr := strconv.Atoi(q); perr == nil && v >= 1 && v <= 65536 {
+		if v, perr := strconv.Atoi(q); perr == nil && v >= defaultRespKB && v <= 65536 {
 			kb = v
 		}
 	}
