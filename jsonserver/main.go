@@ -181,6 +181,28 @@ func startAccessLogger(dir, name string, maxMB, maxFiles int) error {
 	return nil
 }
 
+// logAccess emits one access line. Never blocks: when the channel is full the
+// line is dropped and counted. Format (space separated key=value after the
+// first three fixed fields):
+//
+//	<client ip:port> <method> <path?query> in=<epoch ms> out=<epoch ms> proc_us=<μs> req=<bytes> resp=<bytes> rsp=<code>
+//
+// rsp is the application result: 0000 success, anything else failure
+// (/custom uses its rspCd, /echo uses 0000 or 9999).
+func logAccess(r *http.Request, in, out time.Time, reqBytes, respBytes int64, rsp string) {
+	if logCh == nil {
+		return
+	}
+	line := fmt.Sprintf("%s %s %s in=%d out=%d proc_us=%d req=%d resp=%d rsp=%s\n",
+		r.RemoteAddr, r.Method, r.URL.RequestURI(),
+		in.UnixMilli(), out.UnixMilli(), out.Sub(in).Microseconds(), reqBytes, respBytes, rsp)
+	select {
+	case logCh <- line:
+	default:
+		dropped.Add(1)
+	}
+}
+
 func main() {
 	port := flag.Int("port", 18080, "listen port")
 	accessLog := flag.Bool("accesslog", false, "record per-request in/out times (async, may drop under load)")
@@ -238,15 +260,11 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(buf)
 
-		if logCh != nil {
-			line := fmt.Sprintf("%s in=%d out=%d proc_us=%d bytes=%d\n",
-				r.RemoteAddr, res.InMs, res.OutMs, res.ProcUs, len(body))
-			select {
-			case logCh <- line:
-			default:
-				dropped.Add(1)
-			}
+		rsp := "0000"
+		if res.Error != "" {
+			rsp = "9999"
 		}
+		logAccess(r, in, out, int64(len(body)), int64(len(buf)), rsp)
 	})
 
 	addr := fmt.Sprintf(":%d", *port)

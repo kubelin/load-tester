@@ -127,6 +127,11 @@ awk '{for(i=1;i<=NF;i++) if($i~/^proc_us=/){sub("proc_us=","",$i); s+=$i; n++; i
      END{printf "procUs avg=%.0f max=%d (n=%d)\n", s/n, mx, n}' logs/access_*.log
 ```
 
+```bash
+# 서버가 본 성공/실패 건수 (rsp=0000 이 성공) — JMeter 의 Error% 와 대조
+awk '{for(i=1;i<=NF;i++) if($i~/^rsp=/) c[$i]++} END{for(k in c) print k, c[k]}' logs/access_*.log
+```
+
 **지연 분해 공식**: JMeter가 본 응답시간 − procUs ≈ 네트워크 + 대기열.
 p99가 높은데 procUs가 낮으면 서버 로직이 아니라 커넥션/네트워크 쪽 문제라는 증거가 된다.
 

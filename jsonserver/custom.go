@@ -10,7 +10,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -238,13 +237,6 @@ func customHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(buf)
 
-	if logCh != nil {
-		line := fmt.Sprintf("%s in=%d out=%d proc_us=%d bytes=%d\n",
-			r.RemoteAddr, in.UnixMilli(), out.UnixMilli(), res.Header.ProcUs, r.ContentLength)
-		select {
-		case logCh <- line:
-		default:
-			dropped.Add(1)
-		}
-	}
+	// 액세스 로그: rsp=<rspCd> 로 성공(0000)/실패 구분, resp=<응답 바이트> 로 respKB 크기 확인
+	logAccess(r, in, out, r.ContentLength, int64(len(buf)), res.Header.RspCd)
 }

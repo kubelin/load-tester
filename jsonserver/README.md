@@ -108,7 +108,25 @@ PLAN=custom-load.jmx ./scripts/run-vusers.sh 5000 <서버IP> 18080 1000 300
                    로테이션·보관 정리가 서로의 파일을 건드리지 않음. server.sh 는 access_<포트> 로 줌)
 ```
 
-로그 한 줄 형식: `클라IP:포트 in=<epoch ms> out=<epoch ms> proc_us=<처리 μs> bytes=<수신 바이트>`
+로그 한 줄 형식 (key=value, 순서 고정):
+
+```
+클라IP:포트 메서드 경로?쿼리 in=<epoch ms> out=<epoch ms> proc_us=<처리 μs> req=<요청 바디 바이트> resp=<응답 바디 바이트> rsp=<결과코드>
+127.0.0.1:44672 POST /custom?respKB=64 in=1791330908763 out=1791330908763 proc_us=107 req=23 resp=66073 rsp=0000
+```
+
+- `rsp=0000` 성공, 그 외 실패. `/custom` 은 rspCd 그대로, `/echo` 는 error 있으면 9999
+- `resp=` 는 HTTP 헤더를 뺀 JSON 본문 바이트 — respKB 가 실제로 적용됐는지 여기서 확인
+- 405 로 거절된 요청(GET /custom 등)은 핸들러에 안 들어오므로 기록되지 않음
+
+```bash
+# 성공/실패 건수
+awk '{for(i=1;i<=NF;i++) if($i~/^rsp=/) c[$i]++} END{for(k in c) print k, c[k]}' logs/access_*.log
+# 실패 건만 보기
+grep -v 'rsp=0000' logs/access_*.log
+# 응답 크기별 건수
+awk '{for(i=1;i<=NF;i++) if($i~/^resp=/){sub("resp=","",$i); c[int($i/1024)"KB"]++}} END{for(k in c) print k, c[k]}' logs/access_*.log
+```
 
 ### 로그 동작 정리
 
